@@ -51,6 +51,7 @@ export function BackgroundRemover({
     g: number;
     b: number;
   } | null>(null);
+  const [feather, setFeather] = useState(0);
 
   // Handle incoming transfer from other module
   useEffect(() => {
@@ -91,6 +92,7 @@ export function BackgroundRemover({
       tolerance,
       contiguousOnly,
       targetColor: targetColor ?? undefined,
+      feather,
     };
 
     for (let i = 0; i < files.length; i++) {
@@ -107,7 +109,7 @@ export function BackgroundRemover({
     setResults(processed);
     setResultsVersion((v) => v + 1); // Force re-render of result previews
     setProcessing(false);
-  }, [files, tolerance, contiguousOnly, targetColor]);
+  }, [files, tolerance, contiguousOnly, targetColor, feather]);
 
   const handleDownload = useCallback(async () => {
     if (results.length === 0) return;
@@ -217,6 +219,27 @@ export function BackgroundRemover({
               />
               <p className="text-xs text-zinc-500">
                 容差越高，越多相近的颜色会被处理为透明
+              </p>
+            </div>
+
+            {/* Feather slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-zinc-400">边缘羽化</label>
+                <span className="text-sm font-medium text-emerald-400">
+                  {feather}px
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={feather}
+                onChange={(e) => setFeather(Number(e.target.value))}
+                className="w-full accent-emerald-500"
+              />
+              <p className="text-xs text-zinc-500">
+                羽化可柔化边缘，减少锯齿感
               </p>
             </div>
 
