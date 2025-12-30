@@ -165,6 +165,7 @@ export default function Home() {
             onTransferConsumed={handleTransferConsumed}
             onSendToBackground={handleSendToBackground}
             onHasFilesChange={setSpriteHasFiles}
+            isActive={activeTab === "sprite"}
           />
         </div>
         <div className={activeTab === "background" ? "block" : "hidden"}>
@@ -173,6 +174,7 @@ export default function Home() {
             onTransferConsumed={handleTransferConsumed}
             onSendToSprite={handleSendToSprite}
             onHasFilesChange={setBackgroundHasFiles}
+            isActive={activeTab === "background"}
           />
         </div>
       </main>

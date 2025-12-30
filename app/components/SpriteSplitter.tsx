@@ -23,6 +23,7 @@ interface SpriteSplitterProps {
   onTransferConsumed?: () => void;
   onSendToBackground?: (files: File[]) => void;
   onHasFilesChange?: (hasFiles: boolean) => void;
+  isActive?: boolean;
 }
 
 export function SpriteSplitter({
@@ -30,6 +31,7 @@ export function SpriteSplitter({
   onTransferConsumed,
   onSendToBackground,
   onHasFilesChange,
+  isActive = true,
 }: SpriteSplitterProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<FilePreview[]>([]);
@@ -128,7 +130,7 @@ export function SpriteSplitter({
   if (!hasFiles) {
     return (
       <div className="flex flex-col gap-6">
-        <ImageDropzone onFilesSelected={handleFilesSelected} accept="image/png" />
+        <ImageDropzone onFilesSelected={handleFilesSelected} accept="image/png" pasteEnabled={isActive} />
         {lightboxImage && (
           <ImageLightbox
             src={lightboxImage.src}

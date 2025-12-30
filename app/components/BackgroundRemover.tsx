@@ -23,6 +23,7 @@ interface BackgroundRemoverProps {
   onTransferConsumed?: () => void;
   onSendToSprite?: (files: File[]) => void;
   onHasFilesChange?: (hasFiles: boolean) => void;
+  isActive?: boolean;
 }
 
 export function BackgroundRemover({
@@ -30,6 +31,7 @@ export function BackgroundRemover({
   onTransferConsumed,
   onSendToSprite,
   onHasFilesChange,
+  isActive = true,
 }: BackgroundRemoverProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<FilePreview[]>([]);
@@ -138,7 +140,7 @@ export function BackgroundRemover({
   if (!hasFiles) {
     return (
       <div className="flex flex-col gap-6">
-        <ImageDropzone onFilesSelected={handleFilesSelected} />
+        <ImageDropzone onFilesSelected={handleFilesSelected} pasteEnabled={isActive} />
         {lightboxImage && (
           <ImageLightbox
             src={lightboxImage.src}
