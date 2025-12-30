@@ -62,7 +62,7 @@ export default function Home() {
             </div>
           </div>
           <a
-            href="https://github.com"
+            href="https://github.com/moonrailgun/image-master"
             target="_blank"
             rel="noopener noreferrer"
             className="text-zinc-500 transition-colors hover:text-zinc-300"
