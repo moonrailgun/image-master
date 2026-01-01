@@ -13,6 +13,17 @@ export interface UpscaleProgress {
   stage: "downloading" | "processing";
   progress: number;
   message: string;
+  /** Estimated time remaining in seconds */
+  eta?: number;
+  /** Elapsed time in seconds */
+  elapsed?: number;
+}
+
+function formatTime(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}秒`;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `${mins}分${secs}秒`;
 }
 
 const DB_NAME = "image-master-models";
@@ -213,7 +224,32 @@ export async function upscaleImage(
   outputCanvas.height = outputHeight;
   const outputCtx = outputCanvas.getContext("2d")!;
 
+  // Time tracking for ETA
+  const startTime = performance.now();
   let completedTiles = 0;
+
+  const updateProgress = () => {
+    const elapsed = (performance.now() - startTime) / 1000;
+    const progress = (completedTiles / totalTiles) * 100;
+
+    // Calculate ETA based on completed tiles
+    let eta: number | undefined;
+    let etaText = "";
+    if (completedTiles > 0) {
+      const avgTimePerTile = elapsed / completedTiles;
+      const remainingTiles = totalTiles - completedTiles;
+      eta = avgTimePerTile * remainingTiles;
+      etaText = ` | 预计剩余 ${formatTime(eta)}`;
+    }
+
+    onProgress?.({
+      stage: "processing",
+      progress,
+      message: `处理中... ${completedTiles}/${totalTiles} 块 (${MAX_WORKERS}线程)${etaText}`,
+      eta,
+      elapsed,
+    });
+  };
 
   // Process tiles in parallel
   await Promise.all(
@@ -251,12 +287,7 @@ export async function upscaleImage(
 
             completedTiles++;
             tasksDone++;
-
-            onProgress?.({
-              stage: "processing",
-              progress: (completedTiles / totalTiles) * 100,
-              message: `处理中... ${completedTiles}/${totalTiles} 块 (${MAX_WORKERS}线程)`,
-            });
+            updateProgress();
 
             if (tasksDone >= tasks.length) {
               pooled.worker.removeEventListener("message", handler);
@@ -277,6 +308,10 @@ export async function upscaleImage(
       });
     })
   );
+
+  // Log total time
+  const totalTime = (performance.now() - startTime) / 1000;
+  console.log(`[Upscale] Completed in ${formatTime(totalTime)}`);
 
   // Convert canvas to blob
   const blob = await new Promise<Blob>((resolve, reject) => {

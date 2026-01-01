@@ -442,9 +442,12 @@ export function SuperResolution({
                 <p className="text-sm text-zinc-400">
                   {progressInfo?.message || "处理中..."}
                 </p>
-                <p className="text-xs text-zinc-600">
-                  {Math.round(progressPercent)}%
-                </p>
+                <div className="flex items-center gap-4 text-xs text-zinc-600">
+                  <span>{Math.round(progressPercent)}%</span>
+                  {progressInfo?.elapsed !== undefined && progressInfo.elapsed > 0 && (
+                    <span>已用时 {Math.round(progressInfo.elapsed)}秒</span>
+                  )}
+                </div>
               </div>
             ) : results.length === 0 ? (
               <div className="flex min-h-[200px] items-center justify-center text-zinc-600">
