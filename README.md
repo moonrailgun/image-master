@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Image Master
 
-## Getting Started
+一个纯前端的图片处理工具，所有操作均在浏览器本地完成，**不会上传到服务器**。
 
-First, run the development server:
+## ✨ 功能特性
+
+### 🎨 精灵图拆分 (Sprite Splitter)
+
+- 上传带透明通道的 PNG 图片（如游戏 UI 精灵图集）
+- 自动按照透明区域间隙识别并拆分成独立的小图片
+- 支持批量处理多张图片
+- 支持单张下载或 ZIP 打包下载
+
+### 🖼️ 背景扣除 (Background Remover)
+
+- 上传带纯色背景的图片，自动将背景色处理为透明
+- 支持自动检测背景色或手动拾取颜色
+- 可调整颜色容差范围
+- 边缘羽化功能，减少锯齿感
+- 仅处理连续像素选项，精确控制扣除区域
+
+### 🔄 工具联动
+
+两个工具之间可以互相传递图片，方便进行连续处理流程。
+
+## 🛠️ 技术栈
+
+- [Next.js](https://nextjs.org) - React 框架
+- [React 19](https://react.dev) - UI 库
+- [Tailwind CSS](https://tailwindcss.com) - 样式框架
+- [JSZip](https://stuk.github.io/jszip/) - ZIP 文件生成
+
+## 🚀 快速开始
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
+# 安装依赖
+bun install
+
+# 启动开发服务器
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打开 [http://localhost:3000](http://localhost:3000) 即可使用。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📦 构建部署
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+# 构建生产版本
+bun run build
 
-## Learn More
+# 启动生产服务器
+bun start
+```
 
-To learn more about Next.js, take a look at the following resources:
+## 📄 License
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
