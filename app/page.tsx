@@ -3,8 +3,9 @@
 import { useState, useCallback } from "react";
 import { SpriteSplitter } from "./components/SpriteSplitter";
 import { BackgroundRemover } from "./components/BackgroundRemover";
+import { SuperResolution } from "./components/SuperResolution";
 
-type Tab = "sprite" | "background";
+type Tab = "sprite" | "background" | "upscale";
 
 export interface TransferData {
   files: File[];
@@ -16,14 +17,15 @@ export default function Home() {
   const [pendingTransfer, setPendingTransfer] = useState<TransferData | null>(null);
   const [spriteHasFiles, setSpriteHasFiles] = useState(false);
   const [backgroundHasFiles, setBackgroundHasFiles] = useState(false);
+  const [upscaleHasFiles, setUpscaleHasFiles] = useState(false);
 
-  const handleSendToSprite = useCallback((files: File[]) => {
-    setPendingTransfer({ files, fromModule: "background" });
+  const handleSendToSprite = useCallback((files: File[], fromModule: string) => {
+    setPendingTransfer({ files, fromModule });
     setActiveTab("sprite");
   }, []);
 
-  const handleSendToBackground = useCallback((files: File[]) => {
-    setPendingTransfer({ files, fromModule: "sprite" });
+  const handleSendToBackground = useCallback((files: File[], fromModule: string) => {
+    setPendingTransfer({ files, fromModule });
     setActiveTab("background");
   }, []);
 
@@ -33,7 +35,8 @@ export default function Home() {
 
   const showDescription =
     (activeTab === "sprite" && !spriteHasFiles) ||
-    (activeTab === "background" && !backgroundHasFiles);
+    (activeTab === "background" && !backgroundHasFiles) ||
+    (activeTab === "upscale" && !upscaleHasFiles);
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -126,6 +129,25 @@ export default function Home() {
               </svg>
               背景扣除
             </TabButton>
+            <TabButton
+              active={activeTab === "upscale"}
+              onClick={() => setActiveTab("upscale")}
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                />
+              </svg>
+              超分放大
+            </TabButton>
           </nav>
         </div>
       </div>
@@ -135,7 +157,7 @@ export default function Home() {
         {/* Tool Description */}
         {showDescription && (
           <div className="mb-8">
-            {activeTab === "sprite" ? (
+            {activeTab === "sprite" && (
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
                 <h2 className="mb-2 text-xl font-semibold text-white">
                   精灵图拆分工具
@@ -145,7 +167,8 @@ export default function Home() {
                   精灵图集），自动按照透明区域间隙识别并拆分成独立的小图片。
                 </p>
               </div>
-            ) : (
+            )}
+            {activeTab === "background" && (
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
                 <h2 className="mb-2 text-xl font-semibold text-white">
                   背景扣除工具
@@ -155,26 +178,46 @@ export default function Home() {
                 </p>
               </div>
             )}
+            {activeTab === "upscale" && (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+                <h2 className="mb-2 text-xl font-semibold text-white">
+                  AI 超分放大工具
+                </h2>
+                <p className="text-zinc-400">
+                  使用 Real-ESRGAN 深度学习模型，将图片放大 4x，同时增强细节和清晰度。首次使用需下载模型。
+                </p>
+              </div>
+            )}
           </div>
         )}
 
         {/* Tool Content */}
         <div className={activeTab === "sprite" ? "block" : "hidden"}>
           <SpriteSplitter
-            pendingTransfer={pendingTransfer?.fromModule === "background" ? pendingTransfer : null}
+            pendingTransfer={pendingTransfer?.fromModule !== "sprite" ? pendingTransfer : null}
             onTransferConsumed={handleTransferConsumed}
-            onSendToBackground={handleSendToBackground}
+            onSendToBackground={(files) => handleSendToBackground(files, "sprite")}
             onHasFilesChange={setSpriteHasFiles}
             isActive={activeTab === "sprite"}
           />
         </div>
         <div className={activeTab === "background" ? "block" : "hidden"}>
           <BackgroundRemover
-            pendingTransfer={pendingTransfer?.fromModule === "sprite" ? pendingTransfer : null}
+            pendingTransfer={pendingTransfer?.fromModule !== "background" ? pendingTransfer : null}
             onTransferConsumed={handleTransferConsumed}
-            onSendToSprite={handleSendToSprite}
+            onSendToSprite={(files) => handleSendToSprite(files, "background")}
             onHasFilesChange={setBackgroundHasFiles}
             isActive={activeTab === "background"}
+          />
+        </div>
+        <div className={activeTab === "upscale" ? "block" : "hidden"}>
+          <SuperResolution
+            pendingTransfer={pendingTransfer?.fromModule !== "upscale" ? pendingTransfer : null}
+            onTransferConsumed={handleTransferConsumed}
+            onSendToSprite={(files) => handleSendToSprite(files, "upscale")}
+            onSendToBackground={(files) => handleSendToBackground(files, "upscale")}
+            onHasFilesChange={setUpscaleHasFiles}
+            isActive={activeTab === "upscale"}
           />
         </div>
       </main>
