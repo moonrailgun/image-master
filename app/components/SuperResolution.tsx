@@ -8,6 +8,7 @@ import { useToast } from "./Toast";
 import {
   upscaleImage,
   isModelCached,
+  getWorkerPoolInfo,
   ScaleFactor,
   UpscaleResult,
   UpscaleProgress,
@@ -97,27 +98,45 @@ export function SuperResolution({
     if (files.length === 0) return;
 
     setProcessing(true);
-    setProgressInfo(null);
-    const processed: UpscaleResult[] = [];
-    let hasError = false;
+    const { maxWorkers } = getWorkerPoolInfo();
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      try {
-        const result = await upscaleImage(file, scale, (progress) => {
-          setProgressInfo({
-            ...progress,
-            message: `[${i + 1}/${files.length}] ${progress.message}`,
-          });
-        });
-        processed.push(result);
-      } catch (error) {
+    // Track progress and message for each file
+    const progressData: Map<number, UpscaleProgress> = new Map();
+
+    const updateOverallProgress = () => {
+      const total = files.length;
+      const entries = Array.from(progressData.values());
+      const sum = entries.reduce((a, b) => a + b.progress, 0);
+      const overall = sum / total;
+      const completed = entries.filter((p) => p.progress >= 100).length;
+
+      // Find the latest non-complete message to show
+      const activeEntry = entries.find((p) => p.progress < 100 && p.progress > 0);
+      const message = activeEntry
+        ? `[${completed}/${total}] ${activeEntry.message}`
+        : `并发处理中 (${maxWorkers}线程)... ${completed}/${total} 完成`;
+
+      setProgressInfo({
+        stage: activeEntry?.stage || "processing",
+        progress: overall,
+        message,
+      });
+    };
+
+    setProgressInfo({
+      stage: "processing",
+      progress: 0,
+      message: `准备并发处理 ${files.length} 张图片 (${maxWorkers}线程)...`,
+    });
+
+    // Process all files concurrently
+    const promises = files.map((file, index) =>
+      upscaleImage(file, scale, (progress) => {
+        progressData.set(index, progress);
+        updateOverallProgress();
+      }).catch((error) => {
         console.error(`Failed to process ${file.name}:`, error);
-        hasError = true;
-
-        // Show specific error message
-        const errorMessage =
-          error instanceof Error ? error.message : "未知错误";
+        const errorMessage = error instanceof Error ? error.message : "未知错误";
 
         if (errorMessage.includes("download") || errorMessage.includes("fetch")) {
           showToast(`模型下载失败: ${errorMessage}`, "error");
@@ -126,13 +145,14 @@ export function SuperResolution({
         } else {
           showToast(`处理 ${file.name} 失败: ${errorMessage}`, "error");
         }
+        // Mark as complete even on error
+        progressData.set(index, { stage: "processing", progress: 100, message: "失败" });
+        return null;
+      })
+    );
 
-        // Stop processing on model download error
-        if (errorMessage.includes("download") || errorMessage.includes("Failed to download")) {
-          break;
-        }
-      }
-    }
+    const results = await Promise.all(promises);
+    const processed = results.filter((r): r is UpscaleResult => r !== null);
 
     setResults(processed);
     setResultsVersion((v) => v + 1);
@@ -143,10 +163,10 @@ export function SuperResolution({
     const cached = await isModelCached(scale);
     setModelCached(cached);
 
-    // Show success message if all processed without error
-    if (!hasError && processed.length > 0) {
+    // Show success message
+    if (processed.length === files.length) {
       showToast(`成功处理 ${processed.length} 张图片`, "success");
-    } else if (processed.length > 0 && processed.length < files.length) {
+    } else if (processed.length > 0) {
       showToast(`部分处理成功: ${processed.length}/${files.length} 张`, "info");
     }
   }, [files, scale, showToast]);
@@ -220,7 +240,7 @@ export function SuperResolution({
                     setLightboxImage({ src: preview.url, alt: preview.file.name })
                   }
                 >
-                  <div className="overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] p-1 transition-all hover:border-emerald-500/50">
+                  <div className="overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] transition-all hover:border-emerald-500/50">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={preview.url}
@@ -411,7 +431,22 @@ export function SuperResolution({
               )}
             </div>
 
-            {results.length === 0 ? (
+            {processing ? (
+              <div className="flex min-h-[200px] flex-col items-center justify-center gap-4">
+                <div className="h-2 w-full max-w-xs overflow-hidden rounded-full bg-zinc-700">
+                  <div
+                    className="h-full bg-emerald-500 transition-all duration-200"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <p className="text-sm text-zinc-400">
+                  {progressInfo?.message || "处理中..."}
+                </p>
+                <p className="text-xs text-zinc-600">
+                  {Math.round(progressPercent)}%
+                </p>
+              </div>
+            ) : results.length === 0 ? (
               <div className="flex min-h-[200px] items-center justify-center text-zinc-600">
                 <p>点击「开始 4x 放大」处理图片</p>
               </div>
@@ -458,7 +493,7 @@ function ResultPreview({
       className="group relative cursor-pointer overflow-hidden"
       onClick={() => onZoom(result.blob, result.name)}
     >
-      <div className="overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] p-1 transition-all hover:border-emerald-500/50">
+      <div className="overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] transition-all hover:border-emerald-500/50">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}

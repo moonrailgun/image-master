@@ -178,7 +178,7 @@ export function BackgroundRemover({
                   className="group relative cursor-pointer overflow-hidden"
                   onClick={() => setLightboxImage({ src: preview.url, alt: preview.file.name })}
                 >
-                  <div className="overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] p-1 transition-all hover:border-emerald-500/50">
+                  <div className="overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] transition-all hover:border-emerald-500/50">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={preview.url}
@@ -410,7 +410,7 @@ function ResultPreview({
       className="group relative cursor-pointer overflow-hidden"
       onClick={() => onZoom(result.blob, result.name)}
     >
-      <div className="overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] p-1 transition-all hover:border-emerald-500/50">
+      <div className="overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] transition-all hover:border-emerald-500/50">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}

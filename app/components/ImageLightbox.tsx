@@ -85,7 +85,7 @@ export function ImageLightbox({ src, blob, alt, onClose }: ImageLightboxProps) {
 
       {/* Image container */}
       <div
-        className="relative max-h-[90vh] max-w-[90vw] overflow-auto rounded-lg bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[20px_20px] p-2"
+        className="relative max-h-[90vh] max-w-[90vw] overflow-auto rounded-lg bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[20px_20px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}

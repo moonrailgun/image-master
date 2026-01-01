@@ -1,5 +1,3 @@
-import * as ort from "onnxruntime-web";
-
 export type ScaleFactor = 4;
 
 export interface UpscaleResult {
@@ -17,31 +15,81 @@ export interface UpscaleProgress {
   message: string;
 }
 
-// Model URL from Hugging Face (use /resolve/ for LFS files)
-const MODEL_URL = "https://huggingface.co/AXERA-TECH/Real-ESRGAN/resolve/main/onnx/realesrgan-x4.onnx";
-
 const DB_NAME = "image-master-models";
 const DB_VERSION = 1;
 const STORE_NAME = "onnx-models";
-
-// Tile size for processing large images (model requires exactly 64x64 input)
 const TILE_SIZE = 64;
 
-// Session cache
-const sessionCache: Map<ScaleFactor, ort.InferenceSession> = new Map();
+// Worker pool
+const MAX_WORKERS =
+  typeof navigator !== "undefined" && navigator.hardwareConcurrency
+    ? Math.min(navigator.hardwareConcurrency, 8)
+    : 2;
 
-ort.env.logLevel = "error";
+interface PooledWorker {
+  id: number;
+  worker: Worker;
+  ready: boolean;
+}
 
-/**
- * Open IndexedDB for model caching
- */
+const workerPool: PooledWorker[] = [];
+let workerIdCounter = 0;
+let initPromise: Promise<void> | null = null;
+
+function createWorker(): PooledWorker {
+  const id = ++workerIdCounter;
+  console.log(`[Worker Pool] Creating worker #${id}`);
+  return {
+    id,
+    worker: new Worker(new URL("./super-resolution.worker.ts", import.meta.url)),
+    ready: false,
+  };
+}
+
+async function initWorkerPool(scale: ScaleFactor): Promise<void> {
+  if (initPromise) return initPromise;
+
+  initPromise = (async () => {
+    console.log(`[Worker Pool] Initializing ${MAX_WORKERS} workers...`);
+
+    // Create workers
+    while (workerPool.length < MAX_WORKERS) {
+      workerPool.push(createWorker());
+    }
+
+    // Init all workers in parallel
+    await Promise.all(
+      workerPool.map(
+        (pooled) =>
+          new Promise<void>((resolve, reject) => {
+            const handler = (event: MessageEvent) => {
+              if (event.data.type === "init-done") {
+                pooled.ready = true;
+                pooled.worker.removeEventListener("message", handler);
+                console.log(`[Worker Pool] Worker #${pooled.id} ready`);
+                resolve();
+              } else if (event.data.type === "error") {
+                pooled.worker.removeEventListener("message", handler);
+                reject(new Error(event.data.error));
+              }
+            };
+            pooled.worker.addEventListener("message", handler);
+            pooled.worker.postMessage({ type: "init", scale });
+          })
+      )
+    );
+
+    console.log(`[Worker Pool] All ${MAX_WORKERS} workers initialized`);
+  })();
+
+  return initPromise;
+}
+
 function openModelDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
-
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -51,9 +99,6 @@ function openModelDB(): Promise<IDBDatabase> {
   });
 }
 
-/**
- * Get cached model from IndexedDB
- */
 async function getCachedModel(scale: ScaleFactor): Promise<ArrayBuffer | null> {
   try {
     const db = await openModelDB();
@@ -61,7 +106,6 @@ async function getCachedModel(scale: ScaleFactor): Promise<ArrayBuffer | null> {
       const tx = db.transaction(STORE_NAME, "readonly");
       const store = tx.objectStore(STORE_NAME);
       const request = store.get(`realesrgan-x${scale}`);
-
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve(request.result ?? null);
     });
@@ -70,206 +114,6 @@ async function getCachedModel(scale: ScaleFactor): Promise<ArrayBuffer | null> {
   }
 }
 
-/**
- * Cache model to IndexedDB
- */
-async function cacheModel(
-  scale: ScaleFactor,
-  data: ArrayBuffer
-): Promise<void> {
-  try {
-    const db = await openModelDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const request = store.put(data, `realesrgan-x${scale}`);
-
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
-    });
-  } catch {
-    // Caching failed, continue without cache
-  }
-}
-
-/**
- * Try to fetch from a single URL with progress
- */
-async function fetchWithProgress(
-  url: string,
-  onProgress?: (progress: UpscaleProgress) => void
-): Promise<ArrayBuffer> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-
-  const contentLength = response.headers.get("content-length");
-  const total = contentLength ? parseInt(contentLength, 10) : 0;
-
-  if (!response.body) {
-    throw new Error("Response body is not available");
-  }
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    chunks.push(value);
-    received += value.length;
-
-    if (total > 0 && onProgress) {
-      onProgress({
-        stage: "downloading",
-        progress: (received / total) * 100,
-        message: `下载模型中... ${Math.round(received / 1024 / 1024)}MB / ${Math.round(total / 1024 / 1024)}MB`,
-      });
-    }
-  }
-
-  const buffer = new Uint8Array(received);
-  let position = 0;
-  for (const chunk of chunks) {
-    buffer.set(chunk, position);
-    position += chunk.length;
-  }
-
-  return buffer.buffer;
-}
-
-/**
- * Download model with progress callback
- */
-async function downloadModel(
-  onProgress?: (progress: UpscaleProgress) => void
-): Promise<ArrayBuffer> {
-  onProgress?.({
-    stage: "downloading",
-    progress: 0,
-    message: "正在下载模型...",
-  });
-
-  return await fetchWithProgress(MODEL_URL, onProgress);
-}
-
-/**
- * Validate model buffer by checking size
- */
-function isValidOnnxModel(buffer: ArrayBuffer): boolean {
-  // Minimum valid ONNX model is at least several KB
-  // Real-ESRGAN model is ~64MB, so anything less than 1MB is likely corrupted
-  return buffer.byteLength > 1024 * 1024; // At least 1MB
-}
-
-/**
- * Clear cached model for specific scale
- */
-async function clearCachedModel(scale: ScaleFactor): Promise<void> {
-  try {
-    const db = await openModelDB();
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORE_NAME);
-    store.delete(`realesrgan-x${scale}`);
-    sessionCache.delete(scale);
-  } catch {
-    // Ignore errors
-  }
-}
-
-/**
- * Get or create ONNX session
- */
-async function getSession(
-  scale: ScaleFactor,
-  onProgress?: (progress: UpscaleProgress) => void
-): Promise<ort.InferenceSession> {
-  // Return cached session if available
-  const cached = sessionCache.get(scale);
-  if (cached) {
-    return cached;
-  }
-
-  // Try to load from IndexedDB cache
-  let modelBuffer = await getCachedModel(scale);
-
-  // Validate cached model
-  if (modelBuffer && !isValidOnnxModel(modelBuffer)) {
-    console.warn("Cached model appears invalid, clearing cache...");
-    await clearCachedModel(scale);
-    modelBuffer = null;
-  }
-
-  if (!modelBuffer) {
-    // Download from CDN
-    onProgress?.({
-      stage: "downloading",
-      progress: 0,
-      message: "准备下载模型...",
-    });
-
-    modelBuffer = await downloadModel(onProgress);
-
-    // Validate downloaded model
-    if (!isValidOnnxModel(modelBuffer)) {
-      throw new Error("下载的模型文件无效，请检查网络连接后重试");
-    }
-
-    // Cache for future use
-    await cacheModel(scale, modelBuffer);
-  }
-
-  onProgress?.({
-    stage: "downloading",
-    progress: 100,
-    message: "加载模型中...",
-  });
-
-  // Create session with WebGL or WASM backend
-  try {
-    const session = await ort.InferenceSession.create(modelBuffer, {
-      executionProviders: ["webgl", "wasm"],
-      graphOptimizationLevel: "all",
-    });
-
-    sessionCache.set(scale, session);
-    return session;
-  } catch (error) {
-    // If session creation fails, clear cache and retry once
-    console.error("Session creation failed, clearing cache:", error);
-    await clearCachedModel(scale);
-
-    onProgress?.({
-      stage: "downloading",
-      progress: 0,
-      message: "模型加载失败，正在重新下载...",
-    });
-
-    modelBuffer = await downloadModel(onProgress);
-    await cacheModel(scale, modelBuffer);
-
-    onProgress?.({
-      stage: "downloading",
-      progress: 100,
-      message: "重新加载模型中...",
-    });
-
-    const session = await ort.InferenceSession.create(modelBuffer, {
-      executionProviders: ["webgl", "wasm"],
-      graphOptimizationLevel: "all",
-    });
-
-    sessionCache.set(scale, session);
-    return session;
-  }
-}
-
-/**
- * Load image file to ImageData
- */
 async function loadImage(file: File): Promise<{
   imageData: ImageData;
   width: number;
@@ -295,165 +139,144 @@ async function loadImage(file: File): Promise<{
   });
 }
 
-/**
- * Convert ImageData tile to ONNX tensor (always outputs TILE_SIZE x TILE_SIZE)
- */
-function imageDataToTensor(
-  imageData: ImageData,
-  x: number,
-  y: number
-): ort.Tensor {
-  const { data, width, height } = imageData;
-  const floatData = new Float32Array(3 * TILE_SIZE * TILE_SIZE);
+interface TileTask {
+  tileIndex: number;
+  x: number;
+  y: number;
+  validWidth: number;
+  validHeight: number;
+}
 
-  for (let ty = 0; ty < TILE_SIZE; ty++) {
-    for (let tx = 0; tx < TILE_SIZE; tx++) {
-      // Clamp to image bounds (edge padding)
-      const srcX = Math.min(Math.max(x + tx, 0), width - 1);
-      const srcY = Math.min(Math.max(y + ty, 0), height - 1);
-      const srcIdx = (srcY * width + srcX) * 4;
-      const dstIdx = ty * TILE_SIZE + tx;
-
-      // RGB channels, normalized to [0, 1]
-      floatData[dstIdx] = data[srcIdx] / 255;
-      floatData[TILE_SIZE * TILE_SIZE + dstIdx] = data[srcIdx + 1] / 255;
-      floatData[2 * TILE_SIZE * TILE_SIZE + dstIdx] = data[srcIdx + 2] / 255;
-    }
-  }
-
-  return new ort.Tensor("float32", floatData, [1, 3, TILE_SIZE, TILE_SIZE]);
+interface TileResult {
+  tileIndex: number;
+  x: number;
+  y: number;
+  validWidth: number;
+  validHeight: number;
+  imageData: ImageData;
 }
 
 /**
- * Convert ONNX tensor output to ImageData
- */
-function tensorToImageData(tensor: ort.Tensor): ImageData {
-  const [, , height, width] = tensor.dims;
-  const data = tensor.data as Float32Array;
-  const imageData = new ImageData(width, height);
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const srcIdx = y * width + x;
-      const dstIdx = (y * width + x) * 4;
-
-      // Denormalize from [0, 1] to [0, 255] and clamp
-      imageData.data[dstIdx] = Math.max(
-        0,
-        Math.min(255, Math.round(data[srcIdx] * 255))
-      );
-      imageData.data[dstIdx + 1] = Math.max(
-        0,
-        Math.min(255, Math.round(data[width * height + srcIdx] * 255))
-      );
-      imageData.data[dstIdx + 2] = Math.max(
-        0,
-        Math.min(255, Math.round(data[2 * width * height + srcIdx] * 255))
-      );
-      imageData.data[dstIdx + 3] = 255;
-    }
-  }
-
-  return imageData;
-}
-
-/**
- * Process a single tile through the model
- */
-async function processTile(
-  session: ort.InferenceSession,
-  inputTensor: ort.Tensor
-): Promise<ort.Tensor> {
-  const feeds: Record<string, ort.Tensor> = {};
-  feeds[session.inputNames[0]] = inputTensor;
-
-  const results = await session.run(feeds);
-  return results[session.outputNames[0]];
-}
-
-/**
- * Upscale image using Real-ESRGAN
+ * Upscale image using parallel tile processing
  */
 export async function upscaleImage(
   file: File,
   scale: ScaleFactor,
   onProgress?: (progress: UpscaleProgress) => void
 ): Promise<UpscaleResult> {
-  // Get or create session
-  const session = await getSession(scale, onProgress);
-
-  // Load source image
   const { imageData, width, height } = await loadImage(file);
 
   onProgress?.({
     stage: "processing",
     progress: 0,
-    message: "准备处理图片...",
+    message: `准备并发处理 (${MAX_WORKERS}线程)...`,
   });
 
-  // Calculate output dimensions
-  const outputWidth = width * scale;
-  const outputHeight = height * scale;
+  // Initialize worker pool
+  await initWorkerPool(scale);
+
+  // Calculate tiles
+  const tilesX = Math.ceil(width / TILE_SIZE);
+  const tilesY = Math.ceil(height / TILE_SIZE);
+  const totalTiles = tilesX * tilesY;
+
+  const allTasks: TileTask[] = [];
+  let tileIndex = 0;
+  for (let tileY = 0; tileY < tilesY; tileY++) {
+    for (let tileX = 0; tileX < tilesX; tileX++) {
+      const x = tileX * TILE_SIZE;
+      const y = tileY * TILE_SIZE;
+      allTasks.push({
+        tileIndex: tileIndex++,
+        x,
+        y,
+        validWidth: Math.min(TILE_SIZE, width - x),
+        validHeight: Math.min(TILE_SIZE, height - y),
+      });
+    }
+  }
+
+  console.log(`[Upscale] Processing ${totalTiles} tiles with ${MAX_WORKERS} workers`);
+
+  // Distribute tiles to workers
+  const tasksPerWorker = Math.ceil(allTasks.length / MAX_WORKERS);
+  const workerTasks: TileTask[][] = [];
+  for (let i = 0; i < MAX_WORKERS; i++) {
+    workerTasks.push(allTasks.slice(i * tasksPerWorker, (i + 1) * tasksPerWorker));
+  }
 
   // Create output canvas
+  const outputWidth = width * scale;
+  const outputHeight = height * scale;
   const outputCanvas = document.createElement("canvas");
   outputCanvas.width = outputWidth;
   outputCanvas.height = outputHeight;
   const outputCtx = outputCanvas.getContext("2d")!;
 
-  // Calculate number of tiles
-  const tilesX = Math.ceil(width / TILE_SIZE);
-  const tilesY = Math.ceil(height / TILE_SIZE);
-  const totalTiles = tilesX * tilesY;
-  let processedTiles = 0;
+  let completedTiles = 0;
 
-  // Process each tile
-  for (let tileY = 0; tileY < tilesY; tileY++) {
-    for (let tileX = 0; tileX < tilesX; tileX++) {
-      const x = tileX * TILE_SIZE;
-      const y = tileY * TILE_SIZE;
+  // Process tiles in parallel
+  await Promise.all(
+    workerPool.map((pooled, workerIndex) => {
+      const tasks = workerTasks[workerIndex];
+      if (!tasks || tasks.length === 0) return Promise.resolve();
 
-      // Convert tile to tensor (always 64x64, with edge padding)
-      const inputTensor = imageDataToTensor(imageData, x, y);
+      return new Promise<void>((resolve, reject) => {
+        let tasksDone = 0;
 
-      // Process tile
-      const outputTensor = await processTile(session, inputTensor);
+        const handler = (event: MessageEvent) => {
+          const { type, tileResult, error } = event.data;
 
-      // Convert output tensor to ImageData
-      const tileOutput = tensorToImageData(outputTensor);
+          if (type === "tile-result" && tileResult) {
+            const result = tileResult as TileResult;
 
-      // Calculate how much of this tile is valid (not padded)
-      const validWidth = Math.min(TILE_SIZE, width - x);
-      const validHeight = Math.min(TILE_SIZE, height - y);
+            // Draw tile to output canvas
+            const tileCanvas = document.createElement("canvas");
+            tileCanvas.width = result.imageData.width;
+            tileCanvas.height = result.imageData.height;
+            const tileCtx = tileCanvas.getContext("2d")!;
+            tileCtx.putImageData(result.imageData, 0, 0);
 
-      // Create temporary canvas for tile
-      const tileCanvas = document.createElement("canvas");
-      tileCanvas.width = tileOutput.width;
-      tileCanvas.height = tileOutput.height;
-      const tileCtx = tileCanvas.getContext("2d")!;
-      tileCtx.putImageData(tileOutput, 0, 0);
+            outputCtx.drawImage(
+              tileCanvas,
+              0,
+              0,
+              result.validWidth * scale,
+              result.validHeight * scale,
+              result.x * scale,
+              result.y * scale,
+              result.validWidth * scale,
+              result.validHeight * scale
+            );
 
-      // Draw only the valid region to output (exclude padded edges)
-      outputCtx.drawImage(
-        tileCanvas,
-        0,
-        0,
-        validWidth * scale,
-        validHeight * scale,
-        x * scale,
-        y * scale,
-        validWidth * scale,
-        validHeight * scale
-      );
+            completedTiles++;
+            tasksDone++;
 
-      processedTiles++;
-      onProgress?.({
-        stage: "processing",
-        progress: (processedTiles / totalTiles) * 100,
-        message: `处理中... ${processedTiles}/${totalTiles} 块`,
+            onProgress?.({
+              stage: "processing",
+              progress: (completedTiles / totalTiles) * 100,
+              message: `处理中... ${completedTiles}/${totalTiles} 块 (${MAX_WORKERS}线程)`,
+            });
+
+            if (tasksDone >= tasks.length) {
+              pooled.worker.removeEventListener("message", handler);
+              resolve();
+            }
+          } else if (type === "error") {
+            pooled.worker.removeEventListener("message", handler);
+            reject(new Error(error || "Worker error"));
+          }
+        };
+
+        pooled.worker.addEventListener("message", handler);
+        pooled.worker.postMessage({
+          type: "process-tiles",
+          imageData,
+          tiles: tasks,
+        });
       });
-    }
-  }
+    })
+  );
 
   // Convert canvas to blob
   const blob = await new Promise<Blob>((resolve, reject) => {
@@ -473,25 +296,31 @@ export async function upscaleImage(
   };
 }
 
-/**
- * Check if model is cached
- */
 export async function isModelCached(scale: ScaleFactor): Promise<boolean> {
   const cached = await getCachedModel(scale);
   return cached !== null;
 }
 
-/**
- * Clear cached models
- */
 export async function clearModelCache(): Promise<void> {
   try {
     const db = await openModelDB();
     const tx = db.transaction(STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORE_NAME);
-    store.clear();
-    sessionCache.clear();
+    tx.objectStore(STORE_NAME).clear();
+    terminateWorkers();
   } catch {
-    // Ignore errors
+    // Ignore
   }
+}
+
+export function terminateWorkers(): void {
+  workerPool.forEach((p) => p.worker.terminate());
+  workerPool.length = 0;
+  initPromise = null;
+}
+
+export function getWorkerPoolInfo(): { maxWorkers: number; activeWorkers: number } {
+  return {
+    maxWorkers: MAX_WORKERS,
+    activeWorkers: workerPool.filter((w) => w.ready).length,
+  };
 }
