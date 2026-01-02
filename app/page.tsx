@@ -4,8 +4,9 @@ import { useState, useCallback } from "react";
 import { SpriteSplitter } from "./components/SpriteSplitter";
 import { BackgroundRemover } from "./components/BackgroundRemover";
 import { SuperResolution } from "./components/SuperResolution";
+import { ImageResizer } from "./components/ImageResizer";
 
-type Tab = "sprite" | "background" | "upscale";
+type Tab = "sprite" | "background" | "upscale" | "resize";
 
 export interface TransferData {
   files: File[];
@@ -18,6 +19,7 @@ export default function Home() {
   const [spriteHasFiles, setSpriteHasFiles] = useState(false);
   const [backgroundHasFiles, setBackgroundHasFiles] = useState(false);
   const [upscaleHasFiles, setUpscaleHasFiles] = useState(false);
+  const [resizeHasFiles, setResizeHasFiles] = useState(false);
 
   const handleSendToSprite = useCallback((files: File[], fromModule: string) => {
     setPendingTransfer({ files, fromModule });
@@ -29,6 +31,16 @@ export default function Home() {
     setActiveTab("background");
   }, []);
 
+  const handleSendToUpscale = useCallback((files: File[], fromModule: string) => {
+    setPendingTransfer({ files, fromModule });
+    setActiveTab("upscale");
+  }, []);
+
+  const handleSendToResize = useCallback((files: File[], fromModule: string) => {
+    setPendingTransfer({ files, fromModule });
+    setActiveTab("resize");
+  }, []);
+
   const handleTransferConsumed = useCallback(() => {
     setPendingTransfer(null);
   }, []);
@@ -36,7 +48,8 @@ export default function Home() {
   const showDescription =
     (activeTab === "sprite" && !spriteHasFiles) ||
     (activeTab === "background" && !backgroundHasFiles) ||
-    (activeTab === "upscale" && !upscaleHasFiles);
+    (activeTab === "upscale" && !upscaleHasFiles) ||
+    (activeTab === "resize" && !resizeHasFiles);
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -148,6 +161,25 @@ export default function Home() {
               </svg>
               超分放大
             </TabButton>
+            <TabButton
+              active={activeTab === "resize"}
+              onClick={() => setActiveTab("resize")}
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m4 0v-4m0 4l-5-5"
+                />
+              </svg>
+              尺寸调整
+            </TabButton>
           </nav>
         </div>
       </div>
@@ -188,6 +220,16 @@ export default function Home() {
                 </p>
               </div>
             )}
+            {activeTab === "resize" && (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+                <h2 className="mb-2 text-xl font-semibold text-white">
+                  图片尺寸调整工具
+                </h2>
+                <p className="text-zinc-400">
+                  批量调整图片尺寸，支持按比例缩放或指定目标尺寸，可锁定宽高比保持图片不变形。
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -218,6 +260,17 @@ export default function Home() {
             onSendToBackground={(files) => handleSendToBackground(files, "upscale")}
             onHasFilesChange={setUpscaleHasFiles}
             isActive={activeTab === "upscale"}
+          />
+        </div>
+        <div className={activeTab === "resize" ? "block" : "hidden"}>
+          <ImageResizer
+            pendingTransfer={pendingTransfer?.fromModule !== "resize" ? pendingTransfer : null}
+            onTransferConsumed={handleTransferConsumed}
+            onSendToSprite={(files) => handleSendToSprite(files, "resize")}
+            onSendToBackground={(files) => handleSendToBackground(files, "resize")}
+            onSendToUpscale={(files) => handleSendToUpscale(files, "resize")}
+            onHasFilesChange={setResizeHasFiles}
+            isActive={activeTab === "resize"}
           />
         </div>
       </main>
