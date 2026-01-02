@@ -5,8 +5,9 @@ import { SpriteSplitter } from "./components/SpriteSplitter";
 import { BackgroundRemover } from "./components/BackgroundRemover";
 import { SuperResolution } from "./components/SuperResolution";
 import { ImageResizer } from "./components/ImageResizer";
+import { ImageCompressor } from "./components/ImageCompressor";
 
-type Tab = "sprite" | "background" | "upscale" | "resize";
+type Tab = "sprite" | "background" | "upscale" | "resize" | "compress";
 
 export interface TransferData {
   files: File[];
@@ -20,6 +21,7 @@ export default function Home() {
   const [backgroundHasFiles, setBackgroundHasFiles] = useState(false);
   const [upscaleHasFiles, setUpscaleHasFiles] = useState(false);
   const [resizeHasFiles, setResizeHasFiles] = useState(false);
+  const [compressHasFiles, setCompressHasFiles] = useState(false);
 
   const handleSendToSprite = useCallback((files: File[], fromModule: string) => {
     setPendingTransfer({ files, fromModule });
@@ -41,6 +43,11 @@ export default function Home() {
     setActiveTab("resize");
   }, []);
 
+  const handleSendToCompress = useCallback((files: File[], fromModule: string) => {
+    setPendingTransfer({ files, fromModule });
+    setActiveTab("compress");
+  }, []);
+
   const handleTransferConsumed = useCallback(() => {
     setPendingTransfer(null);
   }, []);
@@ -49,7 +56,8 @@ export default function Home() {
     (activeTab === "sprite" && !spriteHasFiles) ||
     (activeTab === "background" && !backgroundHasFiles) ||
     (activeTab === "upscale" && !upscaleHasFiles) ||
-    (activeTab === "resize" && !resizeHasFiles);
+    (activeTab === "resize" && !resizeHasFiles) ||
+    (activeTab === "compress" && !compressHasFiles);
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -180,6 +188,25 @@ export default function Home() {
               </svg>
               尺寸调整
             </TabButton>
+            <TabButton
+              active={activeTab === "compress"}
+              onClick={() => setActiveTab("compress")}
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                />
+              </svg>
+              图片压缩
+            </TabButton>
           </nav>
         </div>
       </div>
@@ -230,6 +257,16 @@ export default function Home() {
                 </p>
               </div>
             )}
+            {activeTab === "compress" && (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+                <h2 className="mb-2 text-xl font-semibold text-white">
+                  图片压缩工具
+                </h2>
+                <p className="text-zinc-400">
+                  智能压缩图片文件大小，支持 JPEG、WebP、PNG 格式转换和质量调节，在保持画质的同时大幅减小文件体积。
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -271,6 +308,18 @@ export default function Home() {
             onSendToUpscale={(files) => handleSendToUpscale(files, "resize")}
             onHasFilesChange={setResizeHasFiles}
             isActive={activeTab === "resize"}
+          />
+        </div>
+        <div className={activeTab === "compress" ? "block" : "hidden"}>
+          <ImageCompressor
+            pendingTransfer={pendingTransfer?.fromModule !== "compress" ? pendingTransfer : null}
+            onTransferConsumed={handleTransferConsumed}
+            onSendToSprite={(files) => handleSendToSprite(files, "compress")}
+            onSendToBackground={(files) => handleSendToBackground(files, "compress")}
+            onSendToUpscale={(files) => handleSendToUpscale(files, "compress")}
+            onSendToResize={(files) => handleSendToResize(files, "compress")}
+            onHasFilesChange={setCompressHasFiles}
+            isActive={activeTab === "compress"}
           />
         </div>
       </main>

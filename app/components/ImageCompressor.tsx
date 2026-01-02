@@ -1,52 +1,51 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { ImageDropzone } from "./ImageDropzone";
 import { ImageLightbox } from "./ImageLightbox";
 import { DropdownMenu } from "./DropdownMenu";
 import { useToast } from "./Toast";
 import {
-  resizeImages,
-  calculateDimensions,
-  getImageDimensions,
-  ResizeMode,
-  ResizeOptions,
-  ResizeResult,
-} from "../lib/image-resizer";
+  compressImages,
+  formatFileSize,
+  OutputFormat,
+  CompressOptions,
+  CompressResult,
+} from "../lib/image-compressor";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
 import type { TransferData } from "../page";
 
 interface FilePreview {
   file: File;
   url: string;
-  width: number;
-  height: number;
 }
 
-interface ImageResizerProps {
+interface ImageCompressorProps {
   pendingTransfer?: TransferData | null;
   onTransferConsumed?: () => void;
   onSendToSprite?: (files: File[]) => void;
   onSendToBackground?: (files: File[]) => void;
   onSendToUpscale?: (files: File[]) => void;
+  onSendToResize?: (files: File[]) => void;
   onHasFilesChange?: (hasFiles: boolean) => void;
   isActive?: boolean;
 }
 
-export function ImageResizer({
+export function ImageCompressor({
   pendingTransfer,
   onTransferConsumed,
   onSendToSprite,
   onSendToBackground,
   onSendToUpscale,
+  onSendToResize,
   onHasFilesChange,
   isActive = true,
-}: ImageResizerProps) {
+}: ImageCompressorProps) {
   const { showToast } = useToast();
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<FilePreview[]>([]);
   const [processing, setProcessing] = useState(false);
-  const [results, setResults] = useState<ResizeResult[]>([]);
+  const [results, setResults] = useState<CompressResult[]>([]);
   const [resultsVersion, setResultsVersion] = useState(0);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [lightboxImage, setLightboxImage] = useState<{
@@ -55,13 +54,9 @@ export function ImageResizer({
     alt: string;
   } | null>(null);
 
-  // Resize options
-  const [mode, setMode] = useState<ResizeMode>("scale");
-  const [scale, setScale] = useState(100);
-  const [targetWidth, setTargetWidth] = useState<number | undefined>();
-  const [targetHeight, setTargetHeight] = useState<number | undefined>();
-  const [lockAspectRatio, setLockAspectRatio] = useState(true);
-  const [lastEditedDimension, setLastEditedDimension] = useState<"width" | "height">("width");
+  // Compress options
+  const [format, setFormat] = useState<OutputFormat>("original");
+  const [quality, setQuality] = useState(80);
 
   useEffect(() => {
     onHasFilesChange?.(files.length > 0);
@@ -76,99 +71,23 @@ export function ImageResizer({
     }
   }, [pendingTransfer, onTransferConsumed]);
 
-  // Load previews with dimensions
+  // Load previews
   useEffect(() => {
-    let cancelled = false;
-
-    const loadPreviews = async () => {
-      const newPreviews: FilePreview[] = [];
-      for (const file of files) {
-        if (cancelled) break;
-        const url = URL.createObjectURL(file);
-        try {
-          const dims = await getImageDimensions(file);
-          newPreviews.push({ file, url, width: dims.width, height: dims.height });
-        } catch {
-          newPreviews.push({ file, url, width: 0, height: 0 });
-        }
-      }
-      if (!cancelled) {
-        setPreviews(newPreviews);
-        // Initialize target dimensions from first image
-        if (newPreviews.length > 0 && newPreviews[0].width > 0) {
-          setTargetWidth(newPreviews[0].width);
-          setTargetHeight(newPreviews[0].height);
-        }
-      }
-    };
-
-    loadPreviews();
+    const newPreviews = files.map((file) => ({
+      file,
+      url: URL.createObjectURL(file),
+    }));
+    setPreviews(newPreviews);
 
     return () => {
-      cancelled = true;
-      previews.forEach((p) => URL.revokeObjectURL(p.url));
+      newPreviews.forEach((p) => URL.revokeObjectURL(p.url));
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files]);
-
-  // Calculate preview dimensions
-  const previewDimensions = useMemo(() => {
-    if (previews.length === 0) return null;
-    const first = previews[0];
-    if (first.width === 0) return null;
-
-    const options: ResizeOptions = {
-      mode,
-      scale,
-      width: targetWidth,
-      height: targetHeight,
-      lockAspectRatio,
-    };
-
-    return calculateDimensions(first.width, first.height, options);
-  }, [previews, mode, scale, targetWidth, targetHeight, lockAspectRatio]);
 
   const handleFilesSelected = useCallback((selectedFiles: File[]) => {
     setFiles(selectedFiles);
     setResults([]);
   }, []);
-
-  const handleWidthChange = useCallback(
-    (value: number | undefined) => {
-      setTargetWidth(value);
-      setLastEditedDimension("width");
-      if (lockAspectRatio && value && previews.length > 0 && previews[0].width > 0) {
-        const aspectRatio = previews[0].width / previews[0].height;
-        setTargetHeight(Math.round(value / aspectRatio));
-      }
-    },
-    [lockAspectRatio, previews]
-  );
-
-  const handleHeightChange = useCallback(
-    (value: number | undefined) => {
-      setTargetHeight(value);
-      setLastEditedDimension("height");
-      if (lockAspectRatio && value && previews.length > 0 && previews[0].height > 0) {
-        const aspectRatio = previews[0].width / previews[0].height;
-        setTargetWidth(Math.round(value * aspectRatio));
-      }
-    },
-    [lockAspectRatio, previews]
-  );
-
-  const handleLockToggle = useCallback(() => {
-    const newLocked = !lockAspectRatio;
-    setLockAspectRatio(newLocked);
-    if (newLocked && previews.length > 0 && previews[0].width > 0) {
-      const aspectRatio = previews[0].width / previews[0].height;
-      if (lastEditedDimension === "width" && targetWidth) {
-        setTargetHeight(Math.round(targetWidth / aspectRatio));
-      } else if (lastEditedDimension === "height" && targetHeight) {
-        setTargetWidth(Math.round(targetHeight * aspectRatio));
-      }
-    }
-  }, [lockAspectRatio, previews, lastEditedDimension, targetWidth, targetHeight]);
 
   const handleProcess = useCallback(async () => {
     if (files.length === 0) return;
@@ -176,32 +95,40 @@ export function ImageResizer({
     setProcessing(true);
     setProgress({ current: 0, total: files.length });
 
-    const options: ResizeOptions = {
-      mode,
-      scale,
-      width: targetWidth,
-      height: targetHeight,
-      lockAspectRatio,
+    const options: Partial<CompressOptions> = {
+      format,
+      quality,
     };
 
     try {
-      const results = await resizeImages(files, options, (current, total) => {
+      const results = await compressImages(files, options, (current, total) => {
         setProgress({ current, total });
       });
 
       setResults(results);
       setResultsVersion((v) => v + 1);
-      showToast(`成功处理 ${results.length} 张图片`, "success");
-    } catch (error) {
-      console.error("Resize failed:", error);
+
+      // Calculate total savings
+      const totalOriginal = results.reduce((sum, r) => sum + r.originalSize, 0);
+      const totalCompressed = results.reduce((sum, r) => sum + r.compressedSize, 0);
+      const totalSavings = totalOriginal - totalCompressed;
+      const savingsPercent =
+        totalOriginal > 0 ? ((totalSavings / totalOriginal) * 100).toFixed(1) : 0;
+
       showToast(
-        `处理失败: ${error instanceof Error ? error.message : "未知错误"}`,
+        `成功压缩 ${results.length} 张图片，节省 ${formatFileSize(totalSavings)} (${savingsPercent}%)`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Compress failed:", error);
+      showToast(
+        `压缩失败: ${error instanceof Error ? error.message : "未知错误"}`,
         "error"
       );
     } finally {
       setProcessing(false);
     }
-  }, [files, mode, scale, targetWidth, targetHeight, lockAspectRatio, showToast]);
+  }, [files, format, quality, showToast]);
 
   const handleDownload = useCallback(async () => {
     if (results.length === 0) return;
@@ -213,19 +140,17 @@ export function ImageResizer({
         name: result.name,
         blob: result.blob,
       }));
-      await downloadAsZip(items, "resized-images.zip");
+      await downloadAsZip(items, "compressed-images.zip");
     }
   }, [results]);
 
   const handleClear = useCallback(() => {
     setFiles([]);
     setResults([]);
-    setScale(100);
-    setTargetWidth(undefined);
-    setTargetHeight(undefined);
   }, []);
 
   const hasFiles = files.length > 0;
+  const showQualitySlider = true; // Quality affects all formats
 
   // No files - show dropzone only
   if (!hasFiles) {
@@ -246,6 +171,15 @@ export function ImageResizer({
 
   const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
 
+  // Calculate totals for display
+  const totalOriginalSize = files.reduce((sum, f) => sum + f.size, 0);
+  const totalCompressedSize = results.reduce((sum, r) => sum + r.compressedSize, 0);
+  const totalSavings = totalOriginalSize - totalCompressedSize;
+  const savingsPercent =
+    results.length > 0 && totalOriginalSize > 0
+      ? ((totalSavings / totalOriginalSize) * 100).toFixed(1)
+      : null;
+
   return (
     <div className="flex flex-col gap-6">
       {/* Two-column layout */}
@@ -255,7 +189,9 @@ export function ImageResizer({
           {/* Preview */}
           <div className="rounded-xl bg-zinc-800/50 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-medium text-zinc-300">原图预览</span>
+              <span className="text-sm font-medium text-zinc-300">
+                原图 ({files.length} 张，共 {formatFileSize(totalOriginalSize)})
+              </span>
               <button
                 onClick={handleClear}
                 className="text-sm text-zinc-500 hover:text-zinc-300"
@@ -296,72 +232,60 @@ export function ImageResizer({
                     </svg>
                   </div>
                   <p className="mt-1 max-w-20 truncate text-center text-xs text-zinc-500">
-                    {preview.width}×{preview.height}
+                    {formatFileSize(preview.file.size)}
                   </p>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Resize Controls */}
+          {/* Compress Controls */}
           <div className="rounded-xl bg-zinc-800/50 p-4">
-            <span className="mb-4 block text-sm font-medium text-zinc-300">调整设置</span>
+            <span className="mb-4 block text-sm font-medium text-zinc-300">压缩设置</span>
 
-            {/* Mode Toggle */}
-            <div className="mb-4 flex gap-2">
-              <button
-                onClick={() => setMode("scale")}
-                className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  mode === "scale"
-                    ? "bg-emerald-600 text-white"
-                    : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
-                }`}
-              >
-                按比例
-              </button>
-              <button
-                onClick={() => setMode("dimensions")}
-                className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  mode === "dimensions"
-                    ? "bg-emerald-600 text-white"
-                    : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
-                }`}
-              >
-                按尺寸
-              </button>
+            {/* Format Selection */}
+            <div className="mb-4">
+              <label className="mb-2 block text-xs text-zinc-500">输出格式</label>
+              <div className="grid grid-cols-4 gap-2">
+                {(["original", "jpeg", "webp", "png"] as OutputFormat[]).map((fmt) => (
+                  <button
+                    key={fmt}
+                    onClick={() => setFormat(fmt)}
+                    className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                      format === fmt
+                        ? "bg-emerald-600 text-white"
+                        : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                    }`}
+                  >
+                    {fmt === "original" ? "原格式" : fmt.toUpperCase()}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {mode === "scale" ? (
-              /* Scale Mode */
-              <div className="space-y-3">
+            {/* Quality Slider */}
+            <div className="mb-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-zinc-500">压缩质量</label>
+                <span className="text-sm font-medium text-emerald-400">{quality}%</span>
+              </div>
                 <div className="flex items-center gap-3">
                   <input
                     type="range"
-                    min="10"
-                    max="500"
-                    value={scale}
-                    onChange={(e) => setScale(Number(e.target.value))}
+                    min="1"
+                    max="100"
+                    value={quality}
+                    onChange={(e) => setQuality(Number(e.target.value))}
                     className="flex-1"
                   />
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      min="1"
-                      max="1000"
-                      value={scale}
-                      onChange={(e) => setScale(Math.max(1, Math.min(1000, Number(e.target.value) || 100)))}
-                      className="w-16 rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-center text-sm text-white focus:border-emerald-500 focus:outline-none"
-                    />
-                    <span className="text-sm text-zinc-400">%</span>
-                  </div>
                 </div>
                 <div className="flex justify-center gap-2">
-                  {[25, 50, 75, 100, 150, 200].map((v) => (
+                  {[60, 70, 80, 90, 100].map((v) => (
                     <button
                       key={v}
-                      onClick={() => setScale(v)}
+                      onClick={() => setQuality(v)}
                       className={`rounded px-2 py-1 text-xs transition-colors ${
-                        scale === v
+                        quality === v
                           ? "bg-emerald-600 text-white"
                           : "bg-zinc-700 text-zinc-400 hover:bg-zinc-600"
                       }`}
@@ -370,76 +294,15 @@ export function ImageResizer({
                     </button>
                   ))}
                 </div>
-              </div>
-            ) : (
-              /* Dimensions Mode */
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <label className="mb-1 block text-xs text-zinc-500">宽度</label>
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="宽度"
-                      value={targetWidth ?? ""}
-                      onChange={(e) => handleWidthChange(e.target.value ? Number(e.target.value) : undefined)}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
-                    />
-                  </div>
-                  <button
-                    onClick={handleLockToggle}
-                    className={`mt-5 rounded-lg p-2 transition-colors ${
-                      lockAspectRatio
-                        ? "bg-emerald-600 text-white"
-                        : "bg-zinc-700 text-zinc-400 hover:bg-zinc-600"
-                    }`}
-                    title={lockAspectRatio ? "已锁定比例" : "未锁定比例"}
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      {lockAspectRatio ? (
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                        />
-                      ) : (
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"
-                        />
-                      )}
-                    </svg>
-                  </button>
-                  <div className="flex-1">
-                    <label className="mb-1 block text-xs text-zinc-500">高度</label>
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="高度"
-                      value={targetHeight ?? ""}
-                      onChange={(e) => handleHeightChange(e.target.value ? Number(e.target.value) : undefined)}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-                <p className="text-center text-xs text-zinc-500">
-                  {lockAspectRatio ? "🔒 锁定比例 - 修改一个维度会自动计算另一个" : "🔓 自由调整 - 可独立设置宽高"}
-                </p>
-              </div>
-            )}
+            </div>
 
-            {/* Preview dimensions */}
-            {previewDimensions && (
-              <div className="mt-4 rounded-lg bg-zinc-900/50 p-3 text-center">
-                <span className="text-xs text-zinc-500">预计输出尺寸: </span>
-                <span className="text-sm font-medium text-emerald-400">
-                  {previewDimensions.width} × {previewDimensions.height}
-                </span>
-              </div>
-            )}
+            {/* Info */}
+            <div className="rounded-lg bg-zinc-900/50 p-3 text-center text-xs text-zinc-500">
+              {format === "original" && "保持原图格式，自动优化压缩"}
+              {format === "jpeg" && "JPEG 格式，适合照片类图片"}
+              {format === "webp" && "WebP 格式，兼顾质量和压缩率"}
+              {format === "png" && "PNG 格式，保持透明通道"}
+            </div>
           </div>
 
           {/* Process button */}
@@ -473,10 +336,10 @@ export function ImageResizer({
                 </svg>
               )}
               {processing
-                ? `处理中 ${progress.current}/${progress.total}...`
+                ? `压缩中 ${progress.current}/${progress.total}...`
                 : results.length > 0
-                  ? "重新处理"
-                  : "开始调整"}
+                  ? "重新压缩"
+                  : "开始压缩"}
             </span>
           </button>
         </div>
@@ -486,9 +349,11 @@ export function ImageResizer({
           <div className="rounded-xl bg-zinc-800/50 p-4">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm font-medium text-zinc-300">
-                处理结果
+                压缩结果
                 {results.length > 0 && (
-                  <span className="ml-2 text-emerald-400">({results.length} 张)</span>
+                  <span className="ml-2 text-emerald-400">
+                    ({formatFileSize(totalCompressedSize)})
+                  </span>
                 )}
               </span>
               {results.length > 0 && (
@@ -535,7 +400,7 @@ export function ImageResizer({
                               ),
                               onClick: async () => {
                                 const files = results.map(
-                                  (r) => new File([r.blob], r.name, { type: "image/png" })
+                                  (r) => new File([r.blob], r.name, { type: r.blob.type })
                                 );
                                 onSendToSprite(files);
                               },
@@ -569,7 +434,7 @@ export function ImageResizer({
                               ),
                               onClick: async () => {
                                 const files = results.map(
-                                  (r) => new File([r.blob], r.name, { type: "image/png" })
+                                  (r) => new File([r.blob], r.name, { type: r.blob.type })
                                 );
                                 onSendToBackground(files);
                               },
@@ -597,9 +462,37 @@ export function ImageResizer({
                               ),
                               onClick: async () => {
                                 const files = results.map(
-                                  (r) => new File([r.blob], r.name, { type: "image/png" })
+                                  (r) => new File([r.blob], r.name, { type: r.blob.type })
                                 );
                                 onSendToUpscale(files);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(onSendToResize
+                        ? [
+                            {
+                              label: "发送到尺寸调整",
+                              icon: (
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m4 0v-4m0 4l-5-5"
+                                  />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map(
+                                  (r) => new File([r.blob], r.name, { type: r.blob.type })
+                                );
+                                onSendToResize(files);
                               },
                             },
                           ]
@@ -619,25 +512,36 @@ export function ImageResizer({
                   />
                 </div>
                 <p className="text-sm text-zinc-400">
-                  正在处理 {progress.current}/{progress.total}...
+                  正在压缩 {progress.current}/{progress.total}...
                 </p>
               </div>
             ) : results.length === 0 ? (
               <div className="flex min-h-[200px] items-center justify-center text-zinc-600">
-                <p>调整参数后点击「开始调整」处理图片</p>
+                <p>调整参数后点击「开始压缩」处理图片</p>
               </div>
             ) : (
-              <div className="max-h-[400px] overflow-y-auto">
-                <div className="flex flex-wrap gap-3">
-                  {results.map((result, i) => (
-                    <ResultPreview
-                      key={`${resultsVersion}-${i}`}
-                      result={result}
-                      onZoom={(blob, alt) => setLightboxImage({ blob, alt })}
-                    />
-                  ))}
+              <>
+                {/* Savings Summary */}
+                {savingsPercent && (
+                  <div className="mb-4 rounded-lg bg-emerald-500/10 p-3 text-center">
+                    <span className="text-sm text-emerald-400">
+                      总计节省 {formatFileSize(totalSavings)} ({savingsPercent}%)
+                    </span>
+                  </div>
+                )}
+                <div className="max-h-[400px] overflow-y-auto">
+                  <div className="flex flex-wrap gap-3">
+                    {results.map((result, i) => (
+                      <ResultPreview
+                        key={`${resultsVersion}-${i}`}
+                        result={result}
+                        originalSize={files[i]?.size || 0}
+                        onZoom={(blob, alt) => setLightboxImage({ blob, alt })}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -657,12 +561,17 @@ export function ImageResizer({
 
 function ResultPreview({
   result,
+  originalSize,
   onZoom,
 }: {
-  result: ResizeResult;
+  result: CompressResult;
+  originalSize: number;
   onZoom: (blob: Blob, alt: string) => void;
 }) {
   const [url] = useState(() => URL.createObjectURL(result.blob));
+  const savings = originalSize - result.compressedSize;
+  const savingsPercent = originalSize > 0 ? ((savings / originalSize) * 100).toFixed(0) : 0;
+  const isSmaller = savings > 0;
 
   return (
     <div
@@ -692,12 +601,14 @@ function ResultPreview({
           />
         </svg>
       </div>
-      <div className="absolute inset-x-0 bottom-0 translate-y-full opacity-0 transition-all group-hover:translate-y-0 group-hover:opacity-100">
-        <div className="mt-1 truncate rounded bg-zinc-900 px-2 py-1 text-center text-xs text-zinc-400">
-          {result.width}×{result.height}
-        </div>
+      <div className="mt-1 text-center">
+        <p className="text-xs text-zinc-400">{formatFileSize(result.compressedSize)}</p>
+        <p
+          className={`text-xs ${isSmaller ? "text-emerald-400" : "text-amber-400"}`}
+        >
+          {isSmaller ? `-${savingsPercent}%` : `+${Math.abs(Number(savingsPercent))}%`}
+        </p>
       </div>
     </div>
   );
 }
-

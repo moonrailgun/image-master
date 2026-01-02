@@ -162,3 +162,4 @@ export async function getImageDimensions(
   URL.revokeObjectURL(img.src);
   return result;
 }
+
