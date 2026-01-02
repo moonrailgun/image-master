@@ -13,6 +13,7 @@ interface ImageInfo {
   colorSpace: string;
   bitDepth: number;
   memoryUsage: number;
+  compressionRatio: number;
 }
 
 interface ImageLightboxProps {
@@ -150,6 +151,10 @@ export function ImageLightbox({ src, blob, alt, onClose }: ImageLightboxProps) {
       const bytesPerPixel = properties.hasAlpha ? 4 : 3;
       const memoryUsage = img.naturalWidth * img.naturalHeight * bytesPerPixel;
 
+      // Calculate compression ratio: memoryUsage / fileSize
+      // A ratio of 10 means the file is 10x smaller than uncompressed
+      const compressionRatio = size > 0 ? memoryUsage / size : 0;
+
       setImageInfo({
         width: img.naturalWidth,
         height: img.naturalHeight,
@@ -160,6 +165,7 @@ export function ImageLightbox({ src, blob, alt, onClose }: ImageLightboxProps) {
         colorSpace: properties.colorSpace,
         bitDepth: properties.bitDepth,
         memoryUsage,
+        compressionRatio,
       });
     };
     img.src = imageUrl;
@@ -324,6 +330,15 @@ export function ImageLightbox({ src, blob, alt, onClose }: ImageLightboxProps) {
                   </span>
                   <div className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 w-48 rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 opacity-0 shadow-lg transition-opacity group-hover/tip:opacity-100">
                     图片解码后在内存中占用的空间，计算方式：{imageInfo.width} × {imageInfo.height} × {imageInfo.hasAlpha ? 4 : 3} 字节
+                  </div>
+                </div>
+                <div className="group/tip relative flex items-center justify-between gap-8 cursor-help">
+                  <span className="text-zinc-500">压缩比</span>
+                  <span className="font-mono text-xs text-cyan-400">
+                    {imageInfo.compressionRatio > 0 ? `${((1 - 1 / imageInfo.compressionRatio) * 100).toFixed(1)}%` : "未知"}
+                  </span>
+                  <div className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 w-48 rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 opacity-0 shadow-lg transition-opacity group-hover/tip:opacity-100">
+                    文件压缩节省的空间百分比，数值越高表示压缩效果越好
                   </div>
                 </div>
               </div>
