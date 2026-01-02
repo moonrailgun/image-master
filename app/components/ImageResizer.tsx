@@ -31,6 +31,7 @@ interface ImageResizerProps {
   onSendToUpscale?: (files: File[]) => void;
   onSendToCompress?: (files: File[]) => void;
   onSendToTransform?: (files: File[]) => void;
+  onSendToInpaint?: (files: File[]) => void;
   onHasFilesChange?: (hasFiles: boolean) => void;
   isActive?: boolean;
 }
@@ -43,6 +44,7 @@ export function ImageResizer({
   onSendToUpscale,
   onSendToCompress,
   onSendToTransform,
+  onSendToInpaint,
   onHasFilesChange,
   isActive = true,
 }: ImageResizerProps) {
@@ -660,6 +662,34 @@ export function ImageResizer({
                                   (r) => new File([r.blob], r.name, { type: "image/png" })
                                 );
                                 onSendToTransform(files);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(onSendToInpaint
+                        ? [
+                            {
+                              label: "发送到图片修复",
+                              icon: (
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                  />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map(
+                                  (r) => new File([r.blob], r.name, { type: "image/png" })
+                                );
+                                onSendToInpaint(files);
                               },
                             },
                           ]

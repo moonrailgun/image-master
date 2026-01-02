@@ -7,8 +7,9 @@ import { SuperResolution } from "./components/SuperResolution";
 import { ImageResizer } from "./components/ImageResizer";
 import { ImageCompressor } from "./components/ImageCompressor";
 import { ImageTransform } from "./components/ImageTransform";
+import { ImageInpainting } from "./components/ImageInpainting";
 
-type Tab = "sprite" | "background" | "upscale" | "resize" | "compress" | "transform";
+type Tab = "sprite" | "background" | "upscale" | "resize" | "compress" | "transform" | "inpaint";
 
 export interface TransferData {
   files: File[];
@@ -24,6 +25,7 @@ export default function Home() {
   const [resizeHasFiles, setResizeHasFiles] = useState(false);
   const [compressHasFiles, setCompressHasFiles] = useState(false);
   const [transformHasFiles, setTransformHasFiles] = useState(false);
+  const [inpaintHasFiles, setInpaintHasFiles] = useState(false);
 
   const handleSendToSprite = useCallback((files: File[], fromModule: string) => {
     setPendingTransfer({ files, fromModule });
@@ -55,6 +57,11 @@ export default function Home() {
     setActiveTab("transform");
   }, []);
 
+  const handleSendToInpaint = useCallback((files: File[], fromModule: string) => {
+    setPendingTransfer({ files, fromModule });
+    setActiveTab("inpaint");
+  }, []);
+
   const handleTransferConsumed = useCallback(() => {
     setPendingTransfer(null);
   }, []);
@@ -65,7 +72,8 @@ export default function Home() {
     (activeTab === "upscale" && !upscaleHasFiles) ||
     (activeTab === "resize" && !resizeHasFiles) ||
     (activeTab === "compress" && !compressHasFiles) ||
-    (activeTab === "transform" && !transformHasFiles);
+    (activeTab === "transform" && !transformHasFiles) ||
+    (activeTab === "inpaint" && !inpaintHasFiles);
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -234,6 +242,25 @@ export default function Home() {
               </svg>
               旋转翻转
             </TabButton>
+            <TabButton
+              active={activeTab === "inpaint"}
+              onClick={() => setActiveTab("inpaint")}
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                />
+              </svg>
+              图片修复
+            </TabButton>
           </nav>
         </div>
       </div>
@@ -304,6 +331,16 @@ export default function Home() {
                 </p>
               </div>
             )}
+            {activeTab === "inpaint" && (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+                <h2 className="mb-2 text-xl font-semibold text-white">
+                  AI 图片修复工具
+                </h2>
+                <p className="text-zinc-400">
+                  使用 AI 自动修复图片中涂抹标记的区域，可用于移除水印、修复划痕、消除不需要的物体等。首次使用需下载模型。
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -317,6 +354,7 @@ export default function Home() {
             onSendToResize={(files) => handleSendToResize(files, "sprite")}
             onSendToCompress={(files) => handleSendToCompress(files, "sprite")}
             onSendToTransform={(files) => handleSendToTransform(files, "sprite")}
+            onSendToInpaint={(files) => handleSendToInpaint(files, "sprite")}
             onHasFilesChange={setSpriteHasFiles}
             isActive={activeTab === "sprite"}
           />
@@ -330,6 +368,7 @@ export default function Home() {
             onSendToResize={(files) => handleSendToResize(files, "background")}
             onSendToCompress={(files) => handleSendToCompress(files, "background")}
             onSendToTransform={(files) => handleSendToTransform(files, "background")}
+            onSendToInpaint={(files) => handleSendToInpaint(files, "background")}
             onHasFilesChange={setBackgroundHasFiles}
             isActive={activeTab === "background"}
           />
@@ -343,6 +382,7 @@ export default function Home() {
             onSendToResize={(files) => handleSendToResize(files, "upscale")}
             onSendToCompress={(files) => handleSendToCompress(files, "upscale")}
             onSendToTransform={(files) => handleSendToTransform(files, "upscale")}
+            onSendToInpaint={(files) => handleSendToInpaint(files, "upscale")}
             onHasFilesChange={setUpscaleHasFiles}
             isActive={activeTab === "upscale"}
           />
@@ -356,6 +396,7 @@ export default function Home() {
             onSendToUpscale={(files) => handleSendToUpscale(files, "resize")}
             onSendToCompress={(files) => handleSendToCompress(files, "resize")}
             onSendToTransform={(files) => handleSendToTransform(files, "resize")}
+            onSendToInpaint={(files) => handleSendToInpaint(files, "resize")}
             onHasFilesChange={setResizeHasFiles}
             isActive={activeTab === "resize"}
           />
@@ -369,6 +410,7 @@ export default function Home() {
             onSendToUpscale={(files) => handleSendToUpscale(files, "compress")}
             onSendToResize={(files) => handleSendToResize(files, "compress")}
             onSendToTransform={(files) => handleSendToTransform(files, "compress")}
+            onSendToInpaint={(files) => handleSendToInpaint(files, "compress")}
             onHasFilesChange={setCompressHasFiles}
             isActive={activeTab === "compress"}
           />
@@ -382,8 +424,23 @@ export default function Home() {
             onSendToUpscale={(files) => handleSendToUpscale(files, "transform")}
             onSendToResize={(files) => handleSendToResize(files, "transform")}
             onSendToCompress={(files) => handleSendToCompress(files, "transform")}
+            onSendToInpaint={(files) => handleSendToInpaint(files, "transform")}
             onHasFilesChange={setTransformHasFiles}
             isActive={activeTab === "transform"}
+          />
+        </div>
+        <div className={activeTab === "inpaint" ? "block" : "hidden"}>
+          <ImageInpainting
+            pendingTransfer={pendingTransfer?.fromModule !== "inpaint" ? pendingTransfer : null}
+            onTransferConsumed={handleTransferConsumed}
+            onSendToSprite={(files) => handleSendToSprite(files, "inpaint")}
+            onSendToBackground={(files) => handleSendToBackground(files, "inpaint")}
+            onSendToUpscale={(files) => handleSendToUpscale(files, "inpaint")}
+            onSendToResize={(files) => handleSendToResize(files, "inpaint")}
+            onSendToCompress={(files) => handleSendToCompress(files, "inpaint")}
+            onSendToTransform={(files) => handleSendToTransform(files, "inpaint")}
+            onHasFilesChange={setInpaintHasFiles}
+            isActive={activeTab === "inpaint"}
           />
         </div>
       </main>
