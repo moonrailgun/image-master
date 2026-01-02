@@ -6,8 +6,9 @@ import { BackgroundRemover } from "./components/BackgroundRemover";
 import { SuperResolution } from "./components/SuperResolution";
 import { ImageResizer } from "./components/ImageResizer";
 import { ImageCompressor } from "./components/ImageCompressor";
+import { ImageTransform } from "./components/ImageTransform";
 
-type Tab = "sprite" | "background" | "upscale" | "resize" | "compress";
+type Tab = "sprite" | "background" | "upscale" | "resize" | "compress" | "transform";
 
 export interface TransferData {
   files: File[];
@@ -22,6 +23,7 @@ export default function Home() {
   const [upscaleHasFiles, setUpscaleHasFiles] = useState(false);
   const [resizeHasFiles, setResizeHasFiles] = useState(false);
   const [compressHasFiles, setCompressHasFiles] = useState(false);
+  const [transformHasFiles, setTransformHasFiles] = useState(false);
 
   const handleSendToSprite = useCallback((files: File[], fromModule: string) => {
     setPendingTransfer({ files, fromModule });
@@ -48,6 +50,11 @@ export default function Home() {
     setActiveTab("compress");
   }, []);
 
+  const handleSendToTransform = useCallback((files: File[], fromModule: string) => {
+    setPendingTransfer({ files, fromModule });
+    setActiveTab("transform");
+  }, []);
+
   const handleTransferConsumed = useCallback(() => {
     setPendingTransfer(null);
   }, []);
@@ -57,7 +64,8 @@ export default function Home() {
     (activeTab === "background" && !backgroundHasFiles) ||
     (activeTab === "upscale" && !upscaleHasFiles) ||
     (activeTab === "resize" && !resizeHasFiles) ||
-    (activeTab === "compress" && !compressHasFiles);
+    (activeTab === "compress" && !compressHasFiles) ||
+    (activeTab === "transform" && !transformHasFiles);
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -207,6 +215,25 @@ export default function Home() {
               </svg>
               图片压缩
             </TabButton>
+            <TabButton
+              active={activeTab === "transform"}
+              onClick={() => setActiveTab("transform")}
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              旋转翻转
+            </TabButton>
           </nav>
         </div>
       </div>
@@ -267,6 +294,16 @@ export default function Home() {
                 </p>
               </div>
             )}
+            {activeTab === "transform" && (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+                <h2 className="mb-2 text-xl font-semibold text-white">
+                  图片旋转翻转工具
+                </h2>
+                <p className="text-zinc-400">
+                  对图片进行旋转和翻转操作，支持顺时针/逆时针旋转 90°、180°，以及水平/垂直翻转。可组合多个操作按顺序应用。
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -279,6 +316,7 @@ export default function Home() {
             onSendToUpscale={(files) => handleSendToUpscale(files, "sprite")}
             onSendToResize={(files) => handleSendToResize(files, "sprite")}
             onSendToCompress={(files) => handleSendToCompress(files, "sprite")}
+            onSendToTransform={(files) => handleSendToTransform(files, "sprite")}
             onHasFilesChange={setSpriteHasFiles}
             isActive={activeTab === "sprite"}
           />
@@ -291,6 +329,7 @@ export default function Home() {
             onSendToUpscale={(files) => handleSendToUpscale(files, "background")}
             onSendToResize={(files) => handleSendToResize(files, "background")}
             onSendToCompress={(files) => handleSendToCompress(files, "background")}
+            onSendToTransform={(files) => handleSendToTransform(files, "background")}
             onHasFilesChange={setBackgroundHasFiles}
             isActive={activeTab === "background"}
           />
@@ -303,6 +342,7 @@ export default function Home() {
             onSendToBackground={(files) => handleSendToBackground(files, "upscale")}
             onSendToResize={(files) => handleSendToResize(files, "upscale")}
             onSendToCompress={(files) => handleSendToCompress(files, "upscale")}
+            onSendToTransform={(files) => handleSendToTransform(files, "upscale")}
             onHasFilesChange={setUpscaleHasFiles}
             isActive={activeTab === "upscale"}
           />
@@ -315,6 +355,7 @@ export default function Home() {
             onSendToBackground={(files) => handleSendToBackground(files, "resize")}
             onSendToUpscale={(files) => handleSendToUpscale(files, "resize")}
             onSendToCompress={(files) => handleSendToCompress(files, "resize")}
+            onSendToTransform={(files) => handleSendToTransform(files, "resize")}
             onHasFilesChange={setResizeHasFiles}
             isActive={activeTab === "resize"}
           />
@@ -327,8 +368,22 @@ export default function Home() {
             onSendToBackground={(files) => handleSendToBackground(files, "compress")}
             onSendToUpscale={(files) => handleSendToUpscale(files, "compress")}
             onSendToResize={(files) => handleSendToResize(files, "compress")}
+            onSendToTransform={(files) => handleSendToTransform(files, "compress")}
             onHasFilesChange={setCompressHasFiles}
             isActive={activeTab === "compress"}
+          />
+        </div>
+        <div className={activeTab === "transform" ? "block" : "hidden"}>
+          <ImageTransform
+            pendingTransfer={pendingTransfer?.fromModule !== "transform" ? pendingTransfer : null}
+            onTransferConsumed={handleTransferConsumed}
+            onSendToSprite={(files) => handleSendToSprite(files, "transform")}
+            onSendToBackground={(files) => handleSendToBackground(files, "transform")}
+            onSendToUpscale={(files) => handleSendToUpscale(files, "transform")}
+            onSendToResize={(files) => handleSendToResize(files, "transform")}
+            onSendToCompress={(files) => handleSendToCompress(files, "transform")}
+            onHasFilesChange={setTransformHasFiles}
+            isActive={activeTab === "transform"}
           />
         </div>
       </main>

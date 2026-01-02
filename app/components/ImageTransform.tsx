@@ -6,13 +6,10 @@ import { ImageLightbox } from "./ImageLightbox";
 import { DropdownMenu } from "./DropdownMenu";
 import { useToast } from "./Toast";
 import {
-  upscaleImage,
-  isModelCached,
-  getWorkerPoolInfo,
-  ScaleFactor,
-  UpscaleResult,
-  UpscaleProgress,
-} from "../lib/super-resolution";
+  transformImages,
+  TransformOptions,
+  TransformResult,
+} from "../lib/image-transform";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
 import type { TransferData } from "../page";
 
@@ -21,53 +18,43 @@ interface FilePreview {
   url: string;
 }
 
-interface SuperResolutionProps {
+interface ImageTransformProps {
   pendingTransfer?: TransferData | null;
   onTransferConsumed?: () => void;
   onSendToSprite?: (files: File[]) => void;
   onSendToBackground?: (files: File[]) => void;
+  onSendToUpscale?: (files: File[]) => void;
   onSendToResize?: (files: File[]) => void;
   onSendToCompress?: (files: File[]) => void;
-  onSendToTransform?: (files: File[]) => void;
   onHasFilesChange?: (hasFiles: boolean) => void;
   isActive?: boolean;
 }
 
-export function SuperResolution({
+export function ImageTransform({
   pendingTransfer,
   onTransferConsumed,
   onSendToSprite,
   onSendToBackground,
+  onSendToUpscale,
   onSendToResize,
   onSendToCompress,
-  onSendToTransform,
   onHasFilesChange,
   isActive = true,
-}: SuperResolutionProps) {
+}: ImageTransformProps) {
   const { showToast } = useToast();
   const [files, setFiles] = useState<File[]>([]);
   const [processing, setProcessing] = useState(false);
-  const [results, setResults] = useState<UpscaleResult[]>([]);
+  const [results, setResults] = useState<TransformResult[]>([]);
   const [resultsVersion, setResultsVersion] = useState(0);
-  const [progressInfo, setProgressInfo] = useState<UpscaleProgress | null>(null);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [lightboxImage, setLightboxImage] = useState<{
     src?: string;
     blob?: Blob;
     alt: string;
   } | null>(null);
 
-  // Options
-  const scale: ScaleFactor = 4;
-  const [modelCached, setModelCached] = useState(false);
-
-  // Check if model is cached
-  useEffect(() => {
-    const checkCache = async () => {
-      const cached = await isModelCached(4);
-      setModelCached(cached);
-    };
-    checkCache();
-  }, []);
+  // 自定义旋转角度
+  const [customAngle, setCustomAngle] = useState(0);
 
   useEffect(() => {
     onHasFilesChange?.(files.length > 0);
@@ -109,82 +96,62 @@ export function SuperResolution({
     setResults([]);
   }, []);
 
-  const handleProcess = useCallback(async () => {
+  // 执行变换操作
+  const executeTransform = useCallback(async (options: TransformOptions) => {
     if (files.length === 0) return;
 
     setProcessing(true);
-    const { maxWorkers } = getWorkerPoolInfo();
+    setProgress({ current: 0, total: files.length });
 
-    // Track progress and message for each file
-    const progressData: Map<number, UpscaleProgress> = new Map();
-
-    const updateOverallProgress = () => {
-      const total = files.length;
-      const entries = Array.from(progressData.values());
-      const sum = entries.reduce((a, b) => a + b.progress, 0);
-      const overall = sum / total;
-      const completed = entries.filter((p) => p.progress >= 100).length;
-
-      // Find the latest non-complete message to show
-      const activeEntry = entries.find((p) => p.progress < 100 && p.progress > 0);
-      const message = activeEntry
-        ? `[${completed}/${total}] ${activeEntry.message}`
-        : `并发处理中 (${maxWorkers}线程)... ${completed}/${total} 完成`;
-
-      setProgressInfo({
-        stage: activeEntry?.stage || "processing",
-        progress: overall,
-        message,
+    try {
+      const newResults = await transformImages(files, options, (current, total) => {
+        setProgress({ current, total });
       });
-    };
 
-    setProgressInfo({
-      stage: "processing",
-      progress: 0,
-      message: `准备并发处理 ${files.length} 张图片 (${maxWorkers}线程)...`,
-    });
-
-    // Process all files concurrently
-    const promises = files.map((file, index) =>
-      upscaleImage(file, scale, (progress) => {
-        progressData.set(index, progress);
-        updateOverallProgress();
-      }).catch((error) => {
-        console.error(`Failed to process ${file.name}:`, error);
-        const errorMessage = error instanceof Error ? error.message : "未知错误";
-
-        if (errorMessage.includes("download") || errorMessage.includes("fetch")) {
-          showToast(`模型下载失败: ${errorMessage}`, "error");
-        } else if (errorMessage.includes("memory") || errorMessage.includes("OOM")) {
-          showToast(`内存不足，请尝试使用更小的图片`, "error");
-        } else {
-          showToast(`处理 ${file.name} 失败: ${errorMessage}`, "error");
-        }
-        // Mark as complete even on error
-        progressData.set(index, { stage: "processing", progress: 100, message: "失败" });
-        return null;
-      })
-    );
-
-    const results = await Promise.all(promises);
-    const processed = results.filter((r): r is UpscaleResult => r !== null);
-
-    setResults(processed);
-    setResultsVersion((v) => v + 1);
-    setProcessing(false);
-    setProgressInfo(null);
-
-    // Update cache status
-    const cached = await isModelCached(scale);
-    setModelCached(cached);
-
-    // Show success message
-    if (processed.length === files.length) {
-      showToast(`成功处理 ${processed.length} 张图片`, "success");
-    } else if (processed.length > 0) {
-      showToast(`部分处理成功: ${processed.length}/${files.length} 张`, "info");
+      setResults(newResults);
+      setResultsVersion((v) => v + 1);
+      showToast(`成功处理 ${newResults.length} 张图片`, "success");
+    } catch (error) {
+      console.error("Transform failed:", error);
+      showToast(
+        `处理失败: ${error instanceof Error ? error.message : "未知错误"}`,
+        "error"
+      );
+    } finally {
+      setProcessing(false);
     }
-  }, [files, scale, showToast]);
+  }, [files, showToast]);
+
+  // 快捷旋转
+  const handleRotate = useCallback((angle: number) => {
+    executeTransform({ rotateAngle: angle });
+  }, [executeTransform]);
+
+  // 自定义角度旋转
+  const handleCustomRotate = useCallback(() => {
+    if (customAngle === 0) {
+      showToast("请输入旋转角度", "error");
+      return;
+    }
+    executeTransform({ rotateAngle: customAngle });
+  }, [customAngle, executeTransform, showToast]);
+
+  // 翻转
+  const handleFlip = useCallback((direction: "horizontal" | "vertical") => {
+    executeTransform({ flip: direction });
+  }, [executeTransform]);
+
+  // 使用结果作为新输入
+  const handleUseResults = useCallback(() => {
+    if (results.length === 0) return;
+
+    const newFiles = results.map(
+      (r) => new File([r.blob], r.name, { type: r.blob.type })
+    );
+    setFiles(newFiles);
+    setResults([]);
+    showToast("已将结果设为新输入", "success");
+  }, [results, showToast]);
 
   const handleDownload = useCallback(async () => {
     if (results.length === 0) return;
@@ -196,14 +163,14 @@ export function SuperResolution({
         name: result.name,
         blob: result.blob,
       }));
-      await downloadAsZip(items, `upscaled-x${scale}.zip`);
+      await downloadAsZip(items, "transformed-images.zip");
     }
-  }, [results, scale]);
+  }, [results]);
 
   const handleClear = useCallback(() => {
     setFiles([]);
     setResults([]);
-    setProgressInfo(null);
+    setCustomAngle(0);
   }, []);
 
   const hasFiles = files.length > 0;
@@ -225,10 +192,8 @@ export function SuperResolution({
     );
   }
 
-  // Calculate progress percentage
-  const progressPercent = progressInfo?.progress ?? 0;
+  const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
 
-  // Has files - show split layout
   return (
     <div className="flex flex-col gap-6">
       {/* Two-column layout */}
@@ -238,7 +203,9 @@ export function SuperResolution({
           {/* Preview */}
           <div className="rounded-xl bg-zinc-800/50 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-medium text-zinc-300">原图预览</span>
+              <span className="text-sm font-medium text-zinc-300">
+                原图预览 ({files.length} 张)
+              </span>
               <button
                 onClick={handleClear}
                 className="text-sm text-zinc-500 hover:text-zinc-300"
@@ -278,49 +245,133 @@ export function SuperResolution({
                       />
                     </svg>
                   </div>
-                  <p className="mt-1 max-w-20 truncate text-center text-xs text-zinc-500">
-                    {preview.file.name}
-                  </p>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Model status */}
-          {!modelCached && (
-            <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-400">
-              <svg
-                className="h-4 w-4 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <span>首次使用需下载模型（~64MB），之后会自动缓存</span>
-            </div>
-          )}
+          {/* Transform Controls */}
+          <div className="rounded-xl bg-zinc-800/50 p-4">
+            <span className="mb-4 block text-sm font-medium text-zinc-300">变换操作</span>
 
-          {/* Process button */}
-          <button
-            onClick={handleProcess}
-            disabled={processing}
-            className="relative w-full overflow-hidden rounded-xl bg-emerald-600 py-3 font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed"
-          >
+            {/* Quick Rotation */}
+            <div className="mb-4">
+              <label className="mb-2 block text-xs text-zinc-500">快捷旋转</label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => handleRotate(-90)}
+                  disabled={processing}
+                  className="flex items-center justify-center gap-2 rounded-lg bg-zinc-700 px-3 py-2.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                    />
+                  </svg>
+                  -90°
+                </button>
+                <button
+                  onClick={() => handleRotate(180)}
+                  disabled={processing}
+                  className="flex items-center justify-center gap-2 rounded-lg bg-zinc-700 px-3 py-2.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  180°
+                </button>
+                <button
+                  onClick={() => handleRotate(90)}
+                  disabled={processing}
+                  className="flex items-center justify-center gap-2 rounded-lg bg-zinc-700 px-3 py-2.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <svg className="h-5 w-5 -scale-x-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                    />
+                  </svg>
+                  +90°
+                </button>
+              </div>
+            </div>
+
+            {/* Custom Angle Rotation */}
+            <div className="mb-4">
+              <label className="mb-2 block text-xs text-zinc-500">自定义角度</label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    value={customAngle}
+                    onChange={(e) => setCustomAngle(Number(e.target.value))}
+                    placeholder="输入角度"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 pr-8 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">°</span>
+                </div>
+                <button
+                  onClick={handleCustomRotate}
+                  disabled={processing}
+                  className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  旋转
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">正数顺时针，负数逆时针</p>
+            </div>
+
+            {/* Flip Controls */}
+            <div>
+              <label className="mb-2 block text-xs text-zinc-500">翻转</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => handleFlip("horizontal")}
+                  disabled={processing}
+                  className="flex items-center justify-center gap-2 rounded-lg bg-zinc-700 px-3 py-2.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                    />
+                  </svg>
+                  水平翻转
+                </button>
+                <button
+                  onClick={() => handleFlip("vertical")}
+                  disabled={processing}
+                  className="flex items-center justify-center gap-2 rounded-lg bg-zinc-700 px-3 py-2.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <svg className="h-5 w-5 rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                    />
+                  </svg>
+                  垂直翻转
+                </button>
+              </div>
+            </div>
+
+            {/* Processing indicator */}
             {processing && (
-              <div
-                className="absolute inset-y-0 left-0 bg-emerald-500 transition-all duration-300"
-                style={{ width: `${progressPercent}%` }}
-              />
-            )}
-            <span className="relative flex items-center justify-center gap-2">
-              {processing && (
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <div className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-zinc-900/50 p-3">
+                <svg className="h-4 w-4 animate-spin text-emerald-400" viewBox="0 0 24 24" fill="none">
                   <circle
                     className="opacity-25"
                     cx="12"
@@ -335,14 +386,12 @@ export function SuperResolution({
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
-              )}
-              {processing
-                ? progressInfo?.message || "处理中..."
-                : results.length > 0
-                  ? "重新处理"
-                  : `开始 ${scale}x 放大`}
-            </span>
-          </button>
+                <span className="text-sm text-zinc-400">
+                  处理中 {progress.current}/{progress.total}...
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right column - Results */}
@@ -357,6 +406,26 @@ export function SuperResolution({
               </span>
               {results.length > 0 && (
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleUseResults}
+                    className="flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-500"
+                    title="将结果设为新的输入继续处理"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                    继续处理
+                  </button>
                   <button
                     onClick={handleDownload}
                     className="flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
@@ -374,7 +443,7 @@ export function SuperResolution({
                         d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                       />
                     </svg>
-                    {results.length === 1 ? "下载图片" : "下载 ZIP"}
+                    {results.length === 1 ? "下载" : "下载 ZIP"}
                   </button>
                   <DropdownMenu
                     items={[
@@ -399,7 +468,7 @@ export function SuperResolution({
                               ),
                               onClick: async () => {
                                 const files = results.map(
-                                  (r) => new File([r.blob], r.name, { type: "image/png" })
+                                  (r) => new File([r.blob], r.name, { type: r.blob.type })
                                 );
                                 onSendToSprite(files);
                               },
@@ -433,9 +502,37 @@ export function SuperResolution({
                               ),
                               onClick: async () => {
                                 const files = results.map(
-                                  (r) => new File([r.blob], r.name, { type: "image/png" })
+                                  (r) => new File([r.blob], r.name, { type: r.blob.type })
                                 );
                                 onSendToBackground(files);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(onSendToUpscale
+                        ? [
+                            {
+                              label: "发送到超分放大",
+                              icon: (
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                                  />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map(
+                                  (r) => new File([r.blob], r.name, { type: r.blob.type })
+                                );
+                                onSendToUpscale(files);
                               },
                             },
                           ]
@@ -461,7 +558,7 @@ export function SuperResolution({
                               ),
                               onClick: async () => {
                                 const files = results.map(
-                                  (r) => new File([r.blob], r.name, { type: "image/png" })
+                                  (r) => new File([r.blob], r.name, { type: r.blob.type })
                                 );
                                 onSendToResize(files);
                               },
@@ -489,37 +586,9 @@ export function SuperResolution({
                               ),
                               onClick: async () => {
                                 const files = results.map(
-                                  (r) => new File([r.blob], r.name, { type: "image/png" })
+                                  (r) => new File([r.blob], r.name, { type: r.blob.type })
                                 );
                                 onSendToCompress(files);
-                              },
-                            },
-                          ]
-                        : []),
-                      ...(onSendToTransform
-                        ? [
-                            {
-                              label: "发送到旋转翻转",
-                              icon: (
-                                <svg
-                                  className="h-4 w-4"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                  />
-                                </svg>
-                              ),
-                              onClick: async () => {
-                                const files = results.map(
-                                  (r) => new File([r.blob], r.name, { type: "image/png" })
-                                );
-                                onSendToTransform(files);
                               },
                             },
                           ]
@@ -539,18 +608,12 @@ export function SuperResolution({
                   />
                 </div>
                 <p className="text-sm text-zinc-400">
-                  {progressInfo?.message || "处理中..."}
+                  正在处理 {progress.current}/{progress.total}...
                 </p>
-                <div className="flex items-center gap-4 text-xs text-zinc-600">
-                  <span>{Math.round(progressPercent)}%</span>
-                  {progressInfo?.elapsed !== undefined && progressInfo.elapsed > 0 && (
-                    <span>已用时 {Math.round(progressInfo.elapsed)}秒</span>
-                  )}
-                </div>
               </div>
             ) : results.length === 0 ? (
               <div className="flex min-h-[200px] items-center justify-center text-zinc-600">
-                <p>点击「开始 4x 放大」处理图片</p>
+                <p>点击左侧操作按钮处理图片</p>
               </div>
             ) : (
               <div className="max-h-[400px] overflow-y-auto">
@@ -585,7 +648,7 @@ function ResultPreview({
   result,
   onZoom,
 }: {
-  result: UpscaleResult;
+  result: TransformResult;
   onZoom: (blob: Blob, alt: string) => void;
 }) {
   const [url] = useState(() => URL.createObjectURL(result.blob));
@@ -618,10 +681,10 @@ function ResultPreview({
           />
         </svg>
       </div>
-      <div className="absolute inset-x-0 bottom-0 translate-y-full opacity-0 transition-all group-hover:translate-y-0 group-hover:opacity-100">
-        <div className="mt-1 truncate rounded bg-zinc-900 px-2 py-1 text-center text-xs text-zinc-400">
+      <div className="mt-1 text-center">
+        <p className="text-xs text-zinc-400">
           {result.width}×{result.height}
-        </div>
+        </p>
       </div>
     </div>
   );

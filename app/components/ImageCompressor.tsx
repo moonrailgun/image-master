@@ -27,6 +27,7 @@ interface ImageCompressorProps {
   onSendToBackground?: (files: File[]) => void;
   onSendToUpscale?: (files: File[]) => void;
   onSendToResize?: (files: File[]) => void;
+  onSendToTransform?: (files: File[]) => void;
   onHasFilesChange?: (hasFiles: boolean) => void;
   isActive?: boolean;
 }
@@ -38,6 +39,7 @@ export function ImageCompressor({
   onSendToBackground,
   onSendToUpscale,
   onSendToResize,
+  onSendToTransform,
   onHasFilesChange,
   isActive = true,
 }: ImageCompressorProps) {
@@ -501,6 +503,34 @@ export function ImageCompressor({
                                   (r) => new File([r.blob], r.name, { type: r.blob.type })
                                 );
                                 onSendToResize(files);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(onSendToTransform
+                        ? [
+                            {
+                              label: "发送到旋转翻转",
+                              icon: (
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                  />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map(
+                                  (r) => new File([r.blob], r.name, { type: r.blob.type })
+                                );
+                                onSendToTransform(files);
                               },
                             },
                           ]
