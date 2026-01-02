@@ -26,6 +26,8 @@ interface SuperResolutionProps {
   onTransferConsumed?: () => void;
   onSendToSprite?: (files: File[]) => void;
   onSendToBackground?: (files: File[]) => void;
+  onSendToResize?: (files: File[]) => void;
+  onSendToCompress?: (files: File[]) => void;
   onHasFilesChange?: (hasFiles: boolean) => void;
   isActive?: boolean;
 }
@@ -35,6 +37,8 @@ export function SuperResolution({
   onTransferConsumed,
   onSendToSprite,
   onSendToBackground,
+  onSendToResize,
+  onSendToCompress,
   onHasFilesChange,
   isActive = true,
 }: SuperResolutionProps) {
@@ -421,6 +425,62 @@ export function SuperResolution({
                                   (r) => new File([r.blob], r.name, { type: "image/png" })
                                 );
                                 onSendToBackground(files);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(onSendToResize
+                        ? [
+                            {
+                              label: "发送到尺寸调整",
+                              icon: (
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m4 0v-4m0 4l-5-5"
+                                  />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map(
+                                  (r) => new File([r.blob], r.name, { type: "image/png" })
+                                );
+                                onSendToResize(files);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(onSendToCompress
+                        ? [
+                            {
+                              label: "发送到图片压缩",
+                              icon: (
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                                  />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map(
+                                  (r) => new File([r.blob], r.name, { type: "image/png" })
+                                );
+                                onSendToCompress(files);
                               },
                             },
                           ]

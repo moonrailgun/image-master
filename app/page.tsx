@@ -276,6 +276,9 @@ export default function Home() {
             pendingTransfer={pendingTransfer?.fromModule !== "sprite" ? pendingTransfer : null}
             onTransferConsumed={handleTransferConsumed}
             onSendToBackground={(files) => handleSendToBackground(files, "sprite")}
+            onSendToUpscale={(files) => handleSendToUpscale(files, "sprite")}
+            onSendToResize={(files) => handleSendToResize(files, "sprite")}
+            onSendToCompress={(files) => handleSendToCompress(files, "sprite")}
             onHasFilesChange={setSpriteHasFiles}
             isActive={activeTab === "sprite"}
           />
@@ -285,6 +288,9 @@ export default function Home() {
             pendingTransfer={pendingTransfer?.fromModule !== "background" ? pendingTransfer : null}
             onTransferConsumed={handleTransferConsumed}
             onSendToSprite={(files) => handleSendToSprite(files, "background")}
+            onSendToUpscale={(files) => handleSendToUpscale(files, "background")}
+            onSendToResize={(files) => handleSendToResize(files, "background")}
+            onSendToCompress={(files) => handleSendToCompress(files, "background")}
             onHasFilesChange={setBackgroundHasFiles}
             isActive={activeTab === "background"}
           />
@@ -295,6 +301,8 @@ export default function Home() {
             onTransferConsumed={handleTransferConsumed}
             onSendToSprite={(files) => handleSendToSprite(files, "upscale")}
             onSendToBackground={(files) => handleSendToBackground(files, "upscale")}
+            onSendToResize={(files) => handleSendToResize(files, "upscale")}
+            onSendToCompress={(files) => handleSendToCompress(files, "upscale")}
             onHasFilesChange={setUpscaleHasFiles}
             isActive={activeTab === "upscale"}
           />
@@ -306,6 +314,7 @@ export default function Home() {
             onSendToSprite={(files) => handleSendToSprite(files, "resize")}
             onSendToBackground={(files) => handleSendToBackground(files, "resize")}
             onSendToUpscale={(files) => handleSendToUpscale(files, "resize")}
+            onSendToCompress={(files) => handleSendToCompress(files, "resize")}
             onHasFilesChange={setResizeHasFiles}
             isActive={activeTab === "resize"}
           />

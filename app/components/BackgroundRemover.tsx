@@ -22,6 +22,9 @@ interface BackgroundRemoverProps {
   pendingTransfer?: TransferData | null;
   onTransferConsumed?: () => void;
   onSendToSprite?: (files: File[]) => void;
+  onSendToUpscale?: (files: File[]) => void;
+  onSendToResize?: (files: File[]) => void;
+  onSendToCompress?: (files: File[]) => void;
   onHasFilesChange?: (hasFiles: boolean) => void;
   isActive?: boolean;
 }
@@ -30,6 +33,9 @@ export function BackgroundRemover({
   pendingTransfer,
   onTransferConsumed,
   onSendToSprite,
+  onSendToUpscale,
+  onSendToResize,
+  onSendToCompress,
   onHasFilesChange,
   isActive = true,
 }: BackgroundRemoverProps) {
@@ -338,26 +344,74 @@ export function BackgroundRemover({
                     </svg>
                     {results.length === 1 ? "下载图片" : "下载 ZIP"}
                   </button>
-                  {onSendToSprite && (
-                    <DropdownMenu
-                      items={[
-                        {
-                          label: "发送到精灵图拆分",
-                          icon: (
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-                            </svg>
-                          ),
-                          onClick: async () => {
-                            const files = await Promise.all(
-                              results.map(async (r) => new File([r.blob], r.name, { type: "image/png" }))
-                            );
-                            onSendToSprite(files);
-                          },
-                        },
-                      ]}
-                    />
-                  )}
+                  <DropdownMenu
+                    items={[
+                      ...(onSendToSprite
+                        ? [
+                            {
+                              label: "发送到精灵图拆分",
+                              icon: (
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map((r) => new File([r.blob], r.name, { type: "image/png" }));
+                                onSendToSprite(files);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(onSendToUpscale
+                        ? [
+                            {
+                              label: "发送到超分放大",
+                              icon: (
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map((r) => new File([r.blob], r.name, { type: "image/png" }));
+                                onSendToUpscale(files);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(onSendToResize
+                        ? [
+                            {
+                              label: "发送到尺寸调整",
+                              icon: (
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m4 0v-4m0 4l-5-5" />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map((r) => new File([r.blob], r.name, { type: "image/png" }));
+                                onSendToResize(files);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(onSendToCompress
+                        ? [
+                            {
+                              label: "发送到图片压缩",
+                              icon: (
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map((r) => new File([r.blob], r.name, { type: "image/png" }));
+                                onSendToCompress(files);
+                              },
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
                 </div>
               )}
             </div>

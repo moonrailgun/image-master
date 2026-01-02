@@ -29,6 +29,7 @@ interface ImageResizerProps {
   onSendToSprite?: (files: File[]) => void;
   onSendToBackground?: (files: File[]) => void;
   onSendToUpscale?: (files: File[]) => void;
+  onSendToCompress?: (files: File[]) => void;
   onHasFilesChange?: (hasFiles: boolean) => void;
   isActive?: boolean;
 }
@@ -39,6 +40,7 @@ export function ImageResizer({
   onSendToSprite,
   onSendToBackground,
   onSendToUpscale,
+  onSendToCompress,
   onHasFilesChange,
   isActive = true,
 }: ImageResizerProps) {
@@ -604,6 +606,34 @@ export function ImageResizer({
                             },
                           ]
                         : []),
+                      ...(onSendToCompress
+                        ? [
+                            {
+                              label: "发送到图片压缩",
+                              icon: (
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                                  />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map(
+                                  (r) => new File([r.blob], r.name, { type: "image/png" })
+                                );
+                                onSendToCompress(files);
+                              },
+                            },
+                          ]
+                        : []),
                     ]}
                   />
                 </div>
@@ -700,4 +730,3 @@ function ResultPreview({
     </div>
   );
 }
-
