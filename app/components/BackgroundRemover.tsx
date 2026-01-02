@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ImageDropzone } from "./ImageDropzone";
 import { ImageLightbox } from "./ImageLightbox";
 import { ColorPicker } from "./ColorPicker";
@@ -40,7 +40,6 @@ export function BackgroundRemover({
   isActive = true,
 }: BackgroundRemoverProps) {
   const [files, setFiles] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<FilePreview[]>([]);
   const [processing, setProcessing] = useState(false);
   const [results, setResults] = useState<RemoveResult[]>([]);
   const [resultsVersion, setResultsVersion] = useState(0); // Force re-render on reprocess
@@ -62,26 +61,36 @@ export function BackgroundRemover({
   const [feather, setFeather] = useState(0);
 
   // Handle incoming transfer from other module
+  const lastTransferRef = useRef<TransferData | null>(null);
   useEffect(() => {
-    if (pendingTransfer && pendingTransfer.files.length > 0) {
-      setFiles(pendingTransfer.files);
-      setResults([]);
-      setTargetColor(null);
-      onTransferConsumed?.();
+    if (pendingTransfer && pendingTransfer.files.length > 0 && pendingTransfer !== lastTransferRef.current) {
+      lastTransferRef.current = pendingTransfer;
+      queueMicrotask(() => {
+        setFiles(pendingTransfer.files);
+        setResults([]);
+        setTargetColor(null);
+        onTransferConsumed?.();
+      });
     }
   }, [pendingTransfer, onTransferConsumed]);
 
-  useEffect(() => {
-    const newPreviews = files.map((file) => ({
+  // Use useMemo for previews (derived state) and handle cleanup separately
+  const previews = useMemo(() => {
+    return files.map((file) => ({
       file,
       url: URL.createObjectURL(file),
     }));
-    setPreviews(newPreviews);
-
-    return () => {
-      newPreviews.forEach((p) => URL.revokeObjectURL(p.url));
-    };
   }, [files]);
+
+  // Cleanup old object URLs
+  const prevPreviewsRef = useRef<FilePreview[]>([]);
+  useEffect(() => {
+    const prevPreviews = prevPreviewsRef.current;
+    prevPreviewsRef.current = previews;
+    return () => {
+      prevPreviews.forEach((p) => URL.revokeObjectURL(p.url));
+    };
+  }, [previews]);
 
   const handleFilesSelected = useCallback((selectedFiles: File[]) => {
     setFiles(selectedFiles);

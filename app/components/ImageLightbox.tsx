@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { downloadSingle } from "../lib/download";
 
 interface ImageInfo {
@@ -91,11 +91,13 @@ export function ImageLightbox({ src, blob, alt, onClose }: ImageLightboxProps) {
   const [imageInfo, setImageInfo] = useState<ImageInfo | null>(null);
 
   // Persist infoPinned state to localStorage
+  const isFirstRender = useRef(true);
   useEffect(() => {
-    localStorage.setItem(INFO_PINNED_KEY, String(infoPinned));
-    if (infoPinned) {
-      setShowInfo(true);
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
     }
+    localStorage.setItem(INFO_PINNED_KEY, String(infoPinned));
   }, [infoPinned]);
 
   // Create URL from blob using lazy initialization

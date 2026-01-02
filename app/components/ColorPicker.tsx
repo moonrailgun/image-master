@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 
 interface ColorPickerProps {
   file: File | null;
@@ -10,26 +10,37 @@ interface ColorPickerProps {
 
 export function ColorPicker({ file, onColorPicked, selectedColor }: ColorPickerProps) {
   const [isPickerMode, setIsPickerMode] = useState(false);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [hoverColor, setHoverColor] = useState<{ r: number; g: number; b: number } | null>(null);
   const [isCanvasReady, setIsCanvasReady] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageDataRef = useRef<ImageData | null>(null);
 
-  // Create object URL when file changes
-  useEffect(() => {
+  // Use useMemo for imageUrl (derived state from file)
+  const imageUrl = useMemo(() => {
     if (file) {
-      const url = URL.createObjectURL(file);
-      setImageUrl(url);
-      setIsCanvasReady(false);
-      imageDataRef.current = null;
-      return () => URL.revokeObjectURL(url);
-    } else {
-      setImageUrl(null);
-      setIsCanvasReady(false);
-      imageDataRef.current = null;
+      return URL.createObjectURL(file);
     }
+    return null;
   }, [file]);
+
+  // Cleanup old object URLs and reset canvas state
+  const prevImageUrlRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prevUrl = prevImageUrlRef.current;
+    prevImageUrlRef.current = imageUrl;
+
+    // Reset canvas state when file changes (use queueMicrotask to avoid cascading renders)
+    queueMicrotask(() => {
+      setIsCanvasReady(false);
+    });
+    imageDataRef.current = null;
+
+    return () => {
+      if (prevUrl) {
+        URL.revokeObjectURL(prevUrl);
+      }
+    };
+  }, [imageUrl]);
 
   // Load image into canvas when picker mode is enabled and canvas is mounted
   useEffect(() => {
