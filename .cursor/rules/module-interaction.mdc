@@ -1,0 +1,41 @@
+---
+description: 模块交互规范 - 创建或修改图片处理模块时遵循
+globs: app/components/*.tsx, app/page.tsx
+---
+
+# 模块交互规范
+
+## 核心原则
+
+所有模块的**输出可作为其他模块的输入**，形成处理链。
+
+## 模块 Props 接口
+
+```typescript
+interface ModuleProps {
+  pendingTransfer?: TransferData | null;  // 接收数据
+  onTransferConsumed?: () => void;
+  onSendToSprite?: (files: File[]) => void;  // 发送到各模块
+  onSendToBackground?: (files: File[]) => void;
+  onSendToUpscale?: (files: File[]) => void;
+  onSendToResize?: (files: File[]) => void;
+  onSendToCompress?: (files: File[]) => void;
+  onSendToTransform?: (files: File[]) => void;
+  onHasFilesChange?: (hasFiles: boolean) => void;
+  isActive?: boolean;
+}
+```
+
+## 新模块检查清单
+
+创建新模块时必须完成：
+
+1. **新组件**：实现上述 Props 接口
+2. **page.tsx**：
+   - 添加 Tab 类型
+   - 添加 `handleSendToNewModule` 处理函数
+   - 添加 Tab 按钮、描述、渲染
+3. **所有现有模块**：
+   - Props 添加 `onSendToNewModule`
+   - DropdownMenu 添加"发送到新模块"选项
+   - page.tsx 中传入新 prop
