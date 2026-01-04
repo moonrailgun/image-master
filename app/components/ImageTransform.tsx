@@ -27,6 +27,7 @@ interface ImageTransformProps {
   onSendToResize?: (files: File[]) => void;
   onSendToCompress?: (files: File[]) => void;
   onSendToInpaint?: (files: File[]) => void;
+  onSendToCrop?: (files: File[]) => void;
   onHasFilesChange?: (hasFiles: boolean) => void;
   isActive?: boolean;
 }
@@ -40,6 +41,7 @@ export function ImageTransform({
   onSendToResize,
   onSendToCompress,
   onSendToInpaint,
+  onSendToCrop,
   onHasFilesChange,
   isActive = true,
 }: ImageTransformProps) {
@@ -619,6 +621,34 @@ export function ImageTransform({
                                   (r) => new File([r.blob], r.name, { type: r.blob.type })
                                 );
                                 onSendToInpaint(files);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(onSendToCrop
+                        ? [
+                            {
+                              label: "发送到图片裁剪",
+                              icon: (
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M3 4v16h16M7 20V8m0 0h12"
+                                  />
+                                </svg>
+                              ),
+                              onClick: async () => {
+                                const files = results.map(
+                                  (r) => new File([r.blob], r.name, { type: r.blob.type })
+                                );
+                                onSendToCrop(files);
                               },
                             },
                           ]

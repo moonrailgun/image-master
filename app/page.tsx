@@ -8,8 +8,9 @@ import { ImageResizer } from "./components/ImageResizer";
 import { ImageCompressor } from "./components/ImageCompressor";
 import { ImageTransform } from "./components/ImageTransform";
 import { ImageInpainting } from "./components/ImageInpainting";
+import { ImageCropper } from "./components/ImageCropper";
 
-type Tab = "sprite" | "background" | "upscale" | "resize" | "compress" | "transform" | "inpaint";
+type Tab = "sprite" | "background" | "upscale" | "resize" | "compress" | "transform" | "inpaint" | "crop";
 
 export interface TransferData {
   files: File[];
@@ -26,6 +27,7 @@ export default function Home() {
   const [compressHasFiles, setCompressHasFiles] = useState(false);
   const [transformHasFiles, setTransformHasFiles] = useState(false);
   const [inpaintHasFiles, setInpaintHasFiles] = useState(false);
+  const [cropHasFiles, setCropHasFiles] = useState(false);
 
   const handleSendToSprite = useCallback((files: File[], fromModule: string) => {
     setPendingTransfer({ files, fromModule });
@@ -62,6 +64,11 @@ export default function Home() {
     setActiveTab("inpaint");
   }, []);
 
+  const handleSendToCrop = useCallback((files: File[], fromModule: string) => {
+    setPendingTransfer({ files, fromModule });
+    setActiveTab("crop");
+  }, []);
+
   const handleTransferConsumed = useCallback(() => {
     setPendingTransfer(null);
   }, []);
@@ -73,13 +80,14 @@ export default function Home() {
     (activeTab === "resize" && !resizeHasFiles) ||
     (activeTab === "compress" && !compressHasFiles) ||
     (activeTab === "transform" && !transformHasFiles) ||
-    (activeTab === "inpaint" && !inpaintHasFiles);
+    (activeTab === "inpaint" && !inpaintHasFiles) ||
+    (activeTab === "crop" && !cropHasFiles);
 
   return (
     <div className="min-h-screen bg-zinc-950">
       {/* Header */}
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600">
               <svg
@@ -120,7 +128,7 @@ export default function Home() {
 
       {/* Tab Navigation */}
       <div className="border-b border-zinc-800">
-        <div className="mx-auto max-w-4xl px-6">
+        <div className="mx-auto max-w-6xl px-6">
           <nav className="flex gap-1">
             <TabButton
               active={activeTab === "sprite"}
@@ -261,12 +269,31 @@ export default function Home() {
               </svg>
               图片修复
             </TabButton>
+            <TabButton
+              active={activeTab === "crop"}
+              onClick={() => setActiveTab("crop")}
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 4v16h16M7 20V8m0 0h12"
+                />
+              </svg>
+              图片裁剪
+            </TabButton>
           </nav>
         </div>
       </div>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-4xl px-6 py-8">
+      <main className="mx-auto max-w-6xl px-6 py-8">
         {/* Tool Description */}
         {showDescription && (
           <div className="mb-8">
@@ -341,6 +368,16 @@ export default function Home() {
                 </p>
               </div>
             )}
+            {activeTab === "crop" && (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+                <h2 className="mb-2 text-xl font-semibold text-white">
+                  图片裁剪工具
+                </h2>
+                <p className="text-zinc-400">
+                  自由裁剪图片区域，支持拖拽调整裁剪框大小和位置，也可精确输入像素值进行精准裁剪。
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -355,6 +392,7 @@ export default function Home() {
             onSendToCompress={(files) => handleSendToCompress(files, "sprite")}
             onSendToTransform={(files) => handleSendToTransform(files, "sprite")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "sprite")}
+            onSendToCrop={(files) => handleSendToCrop(files, "sprite")}
             onHasFilesChange={setSpriteHasFiles}
             isActive={activeTab === "sprite"}
           />
@@ -369,6 +407,7 @@ export default function Home() {
             onSendToCompress={(files) => handleSendToCompress(files, "background")}
             onSendToTransform={(files) => handleSendToTransform(files, "background")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "background")}
+            onSendToCrop={(files) => handleSendToCrop(files, "background")}
             onHasFilesChange={setBackgroundHasFiles}
             isActive={activeTab === "background"}
           />
@@ -383,6 +422,7 @@ export default function Home() {
             onSendToCompress={(files) => handleSendToCompress(files, "upscale")}
             onSendToTransform={(files) => handleSendToTransform(files, "upscale")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "upscale")}
+            onSendToCrop={(files) => handleSendToCrop(files, "upscale")}
             onHasFilesChange={setUpscaleHasFiles}
             isActive={activeTab === "upscale"}
           />
@@ -397,6 +437,7 @@ export default function Home() {
             onSendToCompress={(files) => handleSendToCompress(files, "resize")}
             onSendToTransform={(files) => handleSendToTransform(files, "resize")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "resize")}
+            onSendToCrop={(files) => handleSendToCrop(files, "resize")}
             onHasFilesChange={setResizeHasFiles}
             isActive={activeTab === "resize"}
           />
@@ -411,6 +452,7 @@ export default function Home() {
             onSendToResize={(files) => handleSendToResize(files, "compress")}
             onSendToTransform={(files) => handleSendToTransform(files, "compress")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "compress")}
+            onSendToCrop={(files) => handleSendToCrop(files, "compress")}
             onHasFilesChange={setCompressHasFiles}
             isActive={activeTab === "compress"}
           />
@@ -425,6 +467,7 @@ export default function Home() {
             onSendToResize={(files) => handleSendToResize(files, "transform")}
             onSendToCompress={(files) => handleSendToCompress(files, "transform")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "transform")}
+            onSendToCrop={(files) => handleSendToCrop(files, "transform")}
             onHasFilesChange={setTransformHasFiles}
             isActive={activeTab === "transform"}
           />
@@ -439,8 +482,24 @@ export default function Home() {
             onSendToResize={(files) => handleSendToResize(files, "inpaint")}
             onSendToCompress={(files) => handleSendToCompress(files, "inpaint")}
             onSendToTransform={(files) => handleSendToTransform(files, "inpaint")}
+            onSendToCrop={(files) => handleSendToCrop(files, "inpaint")}
             onHasFilesChange={setInpaintHasFiles}
             isActive={activeTab === "inpaint"}
+          />
+        </div>
+        <div className={activeTab === "crop" ? "block" : "hidden"}>
+          <ImageCropper
+            pendingTransfer={pendingTransfer?.fromModule !== "crop" ? pendingTransfer : null}
+            onTransferConsumed={handleTransferConsumed}
+            onSendToSprite={(files) => handleSendToSprite(files, "crop")}
+            onSendToBackground={(files) => handleSendToBackground(files, "crop")}
+            onSendToUpscale={(files) => handleSendToUpscale(files, "crop")}
+            onSendToResize={(files) => handleSendToResize(files, "crop")}
+            onSendToCompress={(files) => handleSendToCompress(files, "crop")}
+            onSendToTransform={(files) => handleSendToTransform(files, "crop")}
+            onSendToInpaint={(files) => handleSendToInpaint(files, "crop")}
+            onHasFilesChange={setCropHasFiles}
+            isActive={activeTab === "crop"}
           />
         </div>
       </main>
