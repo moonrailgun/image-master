@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { ImageDropzone } from "./ImageDropzone";
 import { ImageLightbox } from "./ImageLightbox";
+import { ImageCompare } from "./ImageCompare";
 import { DropdownMenu } from "./DropdownMenu";
 import { useToast } from "./Toast";
 import {
@@ -76,6 +77,9 @@ export function ImageInpainting({
   // Mask history for undo
   const maskHistoryRef = useRef<ImageData[]>([]);
   const [canUndo, setCanUndo] = useState(false);
+
+  // Compare mode toggle
+  const [showCompare, setShowCompare] = useState(false);
 
   // Check if model is cached
   useEffect(() => {
@@ -540,7 +544,20 @@ export function ImageInpainting({
         <div className="flex flex-col gap-4">
           <div className="rounded-xl bg-zinc-800/50 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-medium text-zinc-300">修复结果</span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-zinc-300">修复结果</span>
+                {result && (
+                  <label className="flex cursor-pointer items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={showCompare}
+                      onChange={(e) => setShowCompare(e.target.checked)}
+                      className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                    />
+                    对比
+                  </label>
+                )}
+              </div>
               {result && (
                 <div className="flex items-center gap-2">
                   <button
@@ -719,17 +736,29 @@ export function ImageInpainting({
                 </div>
               </div>
             ) : result ? (
-              <div
-                className="group relative mx-auto cursor-pointer overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] transition-all hover:border-emerald-500/50"
-                onClick={() => setLightboxImage({ blob: result.blob, alt: result.name })}
-              >
-                <ResultPreview result={result} />
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                  <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                  </svg>
+              showCompare ? (
+                <div className="overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px]">
+                  <ImageCompare
+                    beforeSrc={imageUrl || undefined}
+                    afterBlob={result.blob}
+                    beforeAlt="原图"
+                    afterAlt={result.name}
+                    className="max-h-[400px] w-full"
+                  />
                 </div>
-              </div>
+              ) : (
+                <div
+                  className="group relative mx-auto cursor-pointer overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] transition-all hover:border-emerald-500/50"
+                  onClick={() => setLightboxImage({ blob: result.blob, alt: result.name })}
+                >
+                  <ResultPreview result={result} />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                    <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                    </svg>
+                  </div>
+                </div>
+              )
             ) : (
               <div className="flex min-h-[200px] items-center justify-center text-zinc-600">
                 <p>涂抹需要修复的区域后，点击「开始修复」</p>
@@ -811,7 +840,7 @@ export function ImageInpainting({
 
           {/* Canvas area */}
           <div
-            className="relative mt-20 max-h-[calc(100vh-160px)] max-w-[calc(100vw-80px)] overflow-auto rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] overflow-hidden"
+            className="relative mt-20 max-h-[calc(100vh-160px)] max-w-[calc(100vw-80px)] overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px]"
             style={{
               aspectRatio: imageDimensions ? `${imageDimensions.width} / ${imageDimensions.height}` : "auto",
             }}
