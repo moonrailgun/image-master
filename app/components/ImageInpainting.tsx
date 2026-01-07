@@ -430,6 +430,13 @@ export function ImageInpainting({
     return brushSize * scale;
   }, [brushSize, imageDimensions]);
 
+  // Handle mouse wheel to adjust brush size
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -5 : 5;
+    setBrushSize((prev) => Math.min(100, Math.max(5, prev + delta)));
+  }, []);
+
   // No file - show dropzone only
   if (!file) {
     return (
@@ -462,20 +469,6 @@ export function ImageInpainting({
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm font-medium text-zinc-300">涂抹需要修复的区域</span>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => maskCanvasRef.current && handleUndo(maskCanvasRef.current)}
-                  disabled={!canUndo || processing}
-                  className="rounded-lg bg-zinc-700 px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  撤销
-                </button>
-                <button
-                  onClick={() => maskCanvasRef.current && handleClearMask(maskCanvasRef.current)}
-                  disabled={processing}
-                  className="rounded-lg bg-zinc-700 px-2 py-1 text-xs text-zinc-300 transition-colors hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  清除涂抹
-                </button>
                 <button
                   onClick={handleClear}
                   className="text-sm text-zinc-500 hover:text-zinc-300"
@@ -541,44 +534,6 @@ export function ImageInpainting({
               <span>首次使用需下载模型（~27MB），之后会自动缓存</span>
             </div>
           )}
-
-          {/* Process button */}
-          <button
-            onClick={handleProcess}
-            disabled={processing}
-            className="relative w-full overflow-hidden rounded-xl bg-emerald-600 py-3 font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed"
-          >
-            {processing && (
-              <div
-                className="absolute inset-y-0 left-0 bg-emerald-500 transition-all duration-300"
-                style={{ width: `${progressPercent}%` }}
-              />
-            )}
-            <span className="relative flex items-center justify-center gap-2">
-              {processing && (
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-              )}
-              {processing
-                ? progressInfo?.message || "处理中..."
-                : result
-                  ? "重新修复"
-                  : "开始修复"}
-            </span>
-          </button>
         </div>
 
         {/* Right column - Results */}
@@ -839,14 +794,24 @@ export function ImageInpainting({
                 onClick={handleCloseFullscreen}
                 className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-600"
               >
-                完成
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  syncMaskToMain();
+                  handleProcess();
+                }}
+                disabled={processing}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                修复
               </button>
             </div>
           </div>
 
           {/* Canvas area */}
           <div
-            className="relative mt-20 max-h-[calc(100vh-160px)] max-w-[calc(100vw-80px)] overflow-auto rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px]"
+            className="relative mt-20 max-h-[calc(100vh-160px)] max-w-[calc(100vw-80px)] overflow-auto rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px] overflow-hidden"
             style={{
               aspectRatio: imageDimensions ? `${imageDimensions.width} / ${imageDimensions.height}` : "auto",
             }}
@@ -867,6 +832,7 @@ export function ImageInpainting({
               onTouchStart={fullscreenHandlers.handlePointerDown}
               onTouchMove={fullscreenHandlers.handlePointerMove}
               onTouchEnd={fullscreenHandlers.handlePointerUp}
+              onWheel={handleWheel}
             />
             {/* Custom cursor */}
             {cursorPos && (
@@ -885,7 +851,7 @@ export function ImageInpainting({
 
           {/* Footer hint */}
           <div className="absolute bottom-4 left-0 right-0 text-center text-sm text-zinc-500">
-            使用鼠标拖动涂抹需要修复的区域 · 滚动滑块调整画笔大小
+            使用鼠标拖动涂抹需要修复的区域 · 滚动鼠标滚轮调整画笔大小
           </div>
         </div>
       )}
