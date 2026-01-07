@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ImageDropzone } from "./ImageDropzone";
 import { ImageLightbox } from "./ImageLightbox";
+import { ImageCompare } from "./ImageCompare";
 import { DropdownMenu } from "./DropdownMenu";
 import { useToast } from "./Toast";
 import {
@@ -63,6 +64,9 @@ export function SuperResolution({
   // Options
   const scale: ScaleFactor = 4;
   const [modelCached, setModelCached] = useState(false);
+
+  // Compare mode toggle
+  const [showCompare, setShowCompare] = useState(false);
 
   // Check if model is cached
   useEffect(() => {
@@ -353,12 +357,25 @@ export function SuperResolution({
         <div className="flex flex-col gap-4">
           <div className="rounded-xl bg-zinc-800/50 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-medium text-zinc-300">
-                处理结果
-                {results.length > 0 && (
-                  <span className="ml-2 text-emerald-400">({results.length} 张)</span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-zinc-300">
+                  处理结果
+                  {results.length > 0 && (
+                    <span className="ml-2 text-emerald-400">({results.length} 张)</span>
+                  )}
+                </span>
+                {results.length > 0 && results.length === previews.length && (
+                  <label className="flex cursor-pointer items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={showCompare}
+                      onChange={(e) => setShowCompare(e.target.checked)}
+                      className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+                    />
+                    对比
+                  </label>
                 )}
-              </span>
+              </div>
               {results.length > 0 && (
                 <div className="flex items-center gap-2">
                   <button
@@ -611,6 +628,25 @@ export function SuperResolution({
             ) : results.length === 0 ? (
               <div className="flex min-h-[200px] items-center justify-center text-zinc-600">
                 <p>点击「开始 4x 放大」处理图片</p>
+              </div>
+            ) : showCompare && results.length === previews.length ? (
+              <div className="max-h-[400px] space-y-4 overflow-y-auto">
+                {results.map((result, i) => (
+                  <div key={`${resultsVersion}-${i}`} className="overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px]">
+                    <ImageCompare
+                      beforeSrc={previews[i]?.url}
+                      afterBlob={result.blob}
+                      beforeAlt="原图"
+                      afterAlt={result.name}
+                      className="max-h-[300px] w-full"
+                    />
+                    {results.length > 1 && (
+                      <div className="border-t border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-center text-xs text-zinc-400">
+                        {result.name} ({result.width}×{result.height})
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="max-h-[400px] overflow-y-auto">
