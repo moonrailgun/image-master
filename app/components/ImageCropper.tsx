@@ -11,6 +11,8 @@ import {
   CropArea,
   getInitialCropArea,
   clamp,
+  getImageDataFromFile,
+  getTrimTransparentArea,
 } from "../lib/image-cropper";
 import { downloadSingle } from "../lib/download";
 import type { TransferData } from "../page";
@@ -83,6 +85,9 @@ export function ImageCropper({
 
   // Fullscreen mode
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Auto trim transparent pixels
+  const [trimPadding, setTrimPadding] = useState(0);
 
   // Drag state
   const [dragging, setDragging] = useState<DragHandle>(null);
@@ -418,6 +423,35 @@ export function ImageCropper({
     }
   }, [imageSize]);
 
+  // Auto trim transparent pixels
+  const handleTrimTransparent = useCallback(async () => {
+    if (!file || !imageSize) return;
+
+    try {
+      const imageData = await getImageDataFromFile(file);
+      const trimArea = getTrimTransparentArea(imageData, trimPadding);
+
+      if (!trimArea) {
+        showToast("图片完全透明，无法自动裁切", "error");
+        return;
+      }
+
+      if (
+        trimArea.x === 0 &&
+        trimArea.y === 0 &&
+        trimArea.width === imageSize.width &&
+        trimArea.height === imageSize.height
+      ) {
+        showToast("图片没有透明像素，裁剪区域已设为整张图片", "info");
+      }
+
+      setCropArea(trimArea);
+    } catch (error) {
+      console.error("Trim transparent failed:", error);
+      showToast("自动裁切失败", "error");
+    }
+  }, [file, imageSize, trimPadding, showToast]);
+
   // Download result
   const handleDownload = useCallback(() => {
     if (!result || !file) return;
@@ -653,7 +687,29 @@ export function ImageCropper({
 
         {/* Fullscreen footer - precise input */}
         <div className="border-t border-zinc-800 bg-zinc-900 px-4 py-3">
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            {/* Auto trim */}
+            <button
+              onClick={handleTrimTransparent}
+              className="flex items-center gap-1.5 rounded-lg bg-zinc-700 px-3 py-1 text-sm text-zinc-300 transition-colors hover:bg-zinc-600"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m0 0a8.001 8.001 0 0115.356 2M4.582 9H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              自动裁切透明
+            </button>
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs text-zinc-500">保留边界:</label>
+              <input
+                type="number"
+                min={0}
+                value={trimPadding}
+                onChange={(e) => setTrimPadding(Math.max(0, parseInt(e.target.value) || 0))}
+                className="w-16 rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              />
+              <span className="text-xs text-zinc-500">px</span>
+            </div>
+            <div className="mx-1 h-4 w-px bg-zinc-700" />
             <label className="text-xs text-zinc-500">精确输入:</label>
             <div className="flex items-center gap-2">
               <label className="text-xs text-zinc-600">X</label>
@@ -735,6 +791,30 @@ export function ImageCropper({
 
             {/* Crop Canvas */}
             {cropCanvas}
+
+            {/* Auto Trim Transparent */}
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                onClick={handleTrimTransparent}
+                className="flex items-center gap-1.5 rounded-lg bg-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-600"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m0 0a8.001 8.001 0 0115.356 2M4.582 9H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                自动裁切透明
+              </button>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-zinc-500 whitespace-nowrap">保留边界:</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={trimPadding}
+                  onChange={(e) => setTrimPadding(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="w-20 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                />
+                <span className="text-xs text-zinc-500">px</span>
+              </div>
+            </div>
 
             {/* Precise Input Controls */}
             <div className="mt-4">
