@@ -9,8 +9,9 @@ import { ImageCompressor } from "./components/ImageCompressor";
 import { ImageTransform } from "./components/ImageTransform";
 import { ImageInpainting } from "./components/ImageInpainting";
 import { ImageCropper } from "./components/ImageCropper";
+import { ImageVectorizer } from "./components/ImageVectorizer";
 
-type Tab = "sprite" | "background" | "upscale" | "resize" | "compress" | "transform" | "inpaint" | "crop";
+type Tab = "sprite" | "background" | "upscale" | "resize" | "compress" | "transform" | "inpaint" | "crop" | "vectorize";
 
 export interface TransferData {
   files: File[];
@@ -28,6 +29,7 @@ export default function Home() {
   const [transformHasFiles, setTransformHasFiles] = useState(false);
   const [inpaintHasFiles, setInpaintHasFiles] = useState(false);
   const [cropHasFiles, setCropHasFiles] = useState(false);
+  const [vectorizeHasFiles, setVectorizeHasFiles] = useState(false);
 
   const handleSendToSprite = useCallback((files: File[], fromModule: string) => {
     setPendingTransfer({ files, fromModule });
@@ -69,6 +71,11 @@ export default function Home() {
     setActiveTab("crop");
   }, []);
 
+  const handleSendToVectorize = useCallback((files: File[], fromModule: string) => {
+    setPendingTransfer({ files, fromModule });
+    setActiveTab("vectorize");
+  }, []);
+
   const handleTransferConsumed = useCallback(() => {
     setPendingTransfer(null);
   }, []);
@@ -81,7 +88,8 @@ export default function Home() {
     (activeTab === "compress" && !compressHasFiles) ||
     (activeTab === "transform" && !transformHasFiles) ||
     (activeTab === "inpaint" && !inpaintHasFiles) ||
-    (activeTab === "crop" && !cropHasFiles);
+    (activeTab === "crop" && !cropHasFiles) ||
+    (activeTab === "vectorize" && !vectorizeHasFiles);
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -288,6 +296,25 @@ export default function Home() {
               </svg>
               图片裁剪
             </TabButton>
+            <TabButton
+              active={activeTab === "vectorize"}
+              onClick={() => setActiveTab("vectorize")}
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
+                />
+              </svg>
+              图片矢量化
+            </TabButton>
           </nav>
         </div>
       </div>
@@ -378,6 +405,16 @@ export default function Home() {
                 </p>
               </div>
             )}
+            {activeTab === "vectorize" && (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+                <h2 className="mb-2 text-xl font-semibold text-white">
+                  图片矢量化工具
+                </h2>
+                <p className="text-zinc-400">
+                  将 PNG/JPG 位图转换为 SVG 矢量图，支持多种预设风格和自定义参数调节，可控制颜色数量、曲线精度等。
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -393,6 +430,7 @@ export default function Home() {
             onSendToTransform={(files) => handleSendToTransform(files, "sprite")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "sprite")}
             onSendToCrop={(files) => handleSendToCrop(files, "sprite")}
+            onSendToVectorize={(files) => handleSendToVectorize(files, "sprite")}
             onHasFilesChange={setSpriteHasFiles}
             isActive={activeTab === "sprite"}
           />
@@ -408,6 +446,7 @@ export default function Home() {
             onSendToTransform={(files) => handleSendToTransform(files, "background")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "background")}
             onSendToCrop={(files) => handleSendToCrop(files, "background")}
+            onSendToVectorize={(files) => handleSendToVectorize(files, "background")}
             onHasFilesChange={setBackgroundHasFiles}
             isActive={activeTab === "background"}
           />
@@ -423,6 +462,7 @@ export default function Home() {
             onSendToTransform={(files) => handleSendToTransform(files, "upscale")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "upscale")}
             onSendToCrop={(files) => handleSendToCrop(files, "upscale")}
+            onSendToVectorize={(files) => handleSendToVectorize(files, "upscale")}
             onHasFilesChange={setUpscaleHasFiles}
             isActive={activeTab === "upscale"}
           />
@@ -438,6 +478,7 @@ export default function Home() {
             onSendToTransform={(files) => handleSendToTransform(files, "resize")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "resize")}
             onSendToCrop={(files) => handleSendToCrop(files, "resize")}
+            onSendToVectorize={(files) => handleSendToVectorize(files, "resize")}
             onHasFilesChange={setResizeHasFiles}
             isActive={activeTab === "resize"}
           />
@@ -453,6 +494,7 @@ export default function Home() {
             onSendToTransform={(files) => handleSendToTransform(files, "compress")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "compress")}
             onSendToCrop={(files) => handleSendToCrop(files, "compress")}
+            onSendToVectorize={(files) => handleSendToVectorize(files, "compress")}
             onHasFilesChange={setCompressHasFiles}
             isActive={activeTab === "compress"}
           />
@@ -468,6 +510,7 @@ export default function Home() {
             onSendToCompress={(files) => handleSendToCompress(files, "transform")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "transform")}
             onSendToCrop={(files) => handleSendToCrop(files, "transform")}
+            onSendToVectorize={(files) => handleSendToVectorize(files, "transform")}
             onHasFilesChange={setTransformHasFiles}
             isActive={activeTab === "transform"}
           />
@@ -483,6 +526,7 @@ export default function Home() {
             onSendToCompress={(files) => handleSendToCompress(files, "inpaint")}
             onSendToTransform={(files) => handleSendToTransform(files, "inpaint")}
             onSendToCrop={(files) => handleSendToCrop(files, "inpaint")}
+            onSendToVectorize={(files) => handleSendToVectorize(files, "inpaint")}
             onHasFilesChange={setInpaintHasFiles}
             isActive={activeTab === "inpaint"}
           />
@@ -498,8 +542,25 @@ export default function Home() {
             onSendToCompress={(files) => handleSendToCompress(files, "crop")}
             onSendToTransform={(files) => handleSendToTransform(files, "crop")}
             onSendToInpaint={(files) => handleSendToInpaint(files, "crop")}
+            onSendToVectorize={(files) => handleSendToVectorize(files, "crop")}
             onHasFilesChange={setCropHasFiles}
             isActive={activeTab === "crop"}
+          />
+        </div>
+        <div className={activeTab === "vectorize" ? "block" : "hidden"}>
+          <ImageVectorizer
+            pendingTransfer={pendingTransfer?.fromModule !== "vectorize" ? pendingTransfer : null}
+            onTransferConsumed={handleTransferConsumed}
+            onSendToSprite={(files) => handleSendToSprite(files, "vectorize")}
+            onSendToBackground={(files) => handleSendToBackground(files, "vectorize")}
+            onSendToUpscale={(files) => handleSendToUpscale(files, "vectorize")}
+            onSendToResize={(files) => handleSendToResize(files, "vectorize")}
+            onSendToCompress={(files) => handleSendToCompress(files, "vectorize")}
+            onSendToTransform={(files) => handleSendToTransform(files, "vectorize")}
+            onSendToInpaint={(files) => handleSendToInpaint(files, "vectorize")}
+            onSendToCrop={(files) => handleSendToCrop(files, "vectorize")}
+            onHasFilesChange={setVectorizeHasFiles}
+            isActive={activeTab === "vectorize"}
           />
         </div>
       </main>

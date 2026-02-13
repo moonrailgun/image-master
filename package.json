@@ -11,6 +11,7 @@
   "dependencies": {
     "browser-image-compression": "^2.0.2",
     "file-saver": "^2.0.5",
+    "imagetracerjs": "^1.2.6",
     "jszip": "^3.10.1",
     "next": "16.1.1",
     "onnxruntime-web": "^1.23.2",

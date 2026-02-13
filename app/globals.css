@@ -85,3 +85,10 @@ input[type="range"]::-moz-range-thumb:hover {
   background-image: repeating-conic-gradient(#1a1a1a 0% 25%, #2a2a2a 0% 50%);
   background-size: 16px 16px;
 }
+
+/* Inline SVG container: make embedded SVGs scale to fit */
+.svg-inline-container > svg {
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+}
