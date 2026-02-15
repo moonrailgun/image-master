@@ -5,6 +5,13 @@ export interface RemoveBackgroundOptions {
   feather?: number; // 0-20 pixels
 }
 
+export type AIModel = "isnet" | "isnet_fp16" | "isnet_quint8";
+
+export interface AIRemoveBackgroundOptions {
+  model: AIModel;
+  onProgress?: (phase: string, progress: number) => void;
+}
+
 export interface RemoveResult {
   name: string;
   blob: Blob;
@@ -248,6 +255,63 @@ function floodFillRemove(
       stack.push([x + dx, y + dy]);
     }
   }
+}
+
+/**
+ * AI-powered background removal using @imgly/background-removal
+ */
+export async function aiRemoveBackground(
+  file: File,
+  options: AIRemoveBackgroundOptions
+): Promise<RemoveResult> {
+  const { removeBackground: imglyRemoveBackground } = await import(
+    "@imgly/background-removal"
+  );
+
+  const { model, onProgress } = options;
+
+  onProgress?.("init", 0);
+
+  const blob = await imglyRemoveBackground(file, {
+    model,
+    progress: (key: string, current: number, total: number) => {
+      const ratio = total > 0 ? current / total : 0;
+      if (key.includes("fetch:")) {
+        onProgress?.("download", ratio);
+      } else if (key === "compute:inference") {
+        onProgress?.("inference", ratio);
+      } else {
+        onProgress?.("processing", ratio);
+      }
+    },
+  });
+
+  const resultBlob = blob instanceof Blob ? blob : new Blob([blob], { type: "image/png" });
+
+  // Get dimensions from the result
+  const img = await loadImageFromBlob(resultBlob);
+  return {
+    name: file.name.replace(/\.[^/.]+$/, "") + ".png",
+    blob: resultBlob,
+    width: img.width,
+    height: img.height,
+  };
+}
+
+function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = (e) => {
+      URL.revokeObjectURL(url);
+      reject(e);
+    };
+    img.src = url;
+  });
 }
 
 function loadImage(file: File): Promise<HTMLImageElement> {

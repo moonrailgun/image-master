@@ -48,7 +48,7 @@ let sessionCache: ort.InferenceSession | null = null;
 ort.env.logLevel = "error";
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.simd = true;
-ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/";
+ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/";
 
 function openModelDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {

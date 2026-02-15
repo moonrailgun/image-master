@@ -7,8 +7,10 @@ import { ColorPicker } from "./ColorPicker";
 import { DropdownMenu } from "./DropdownMenu";
 import {
   removeBackground,
+  aiRemoveBackground,
   RemoveResult,
   RemoveBackgroundOptions,
+  AIModel,
 } from "../lib/background-remover";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
 import type { TransferData } from "../page";
@@ -54,11 +56,18 @@ export function BackgroundRemover({
   const [progress, setProgress] = useState(0);
   const [lightboxImage, setLightboxImage] = useState<{ src?: string; blob?: Blob; alt: string } | null>(null);
 
+  // Mode: "color" for color-based, "ai" for AI-powered
+  const [mode, setMode] = useState<"color" | "ai">("color");
+
+  // AI options
+  const [aiModel, setAiModel] = useState<AIModel>("isnet");
+  const [aiPhase, setAiPhase] = useState("");
+
   useEffect(() => {
     onHasFilesChange?.(files.length > 0);
   }, [files.length, onHasFilesChange]);
 
-  // Options
+  // Color-based options
   const [tolerance, setTolerance] = useState(10);
   const [contiguousOnly, setContiguousOnly] = useState(true);
   const [targetColor, setTargetColor] = useState<{
@@ -111,30 +120,47 @@ export function BackgroundRemover({
 
     setProcessing(true);
     setProgress(0);
+    setAiPhase("");
     const processed: RemoveResult[] = [];
-
-    const options: RemoveBackgroundOptions = {
-      tolerance,
-      contiguousOnly,
-      targetColor: targetColor ?? undefined,
-      feather,
-    };
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        const result = await removeBackground(file, options);
+        let result: RemoveResult;
+        if (mode === "ai") {
+          result = await aiRemoveBackground(file, {
+            model: aiModel,
+            onProgress: (phase, ratio) => {
+              setAiPhase(phase);
+              // Per-file progress blended with overall file progress
+              const fileBase = i / files.length;
+              const fileShare = 1 / files.length;
+              setProgress((fileBase + fileShare * ratio) * 100);
+            },
+          });
+        } else {
+          const options: RemoveBackgroundOptions = {
+            tolerance,
+            contiguousOnly,
+            targetColor: targetColor ?? undefined,
+            feather,
+          };
+          result = await removeBackground(file, options);
+        }
         processed.push(result);
       } catch (error) {
         console.error(`Failed to process ${file.name}:`, error);
       }
-      setProgress(((i + 1) / files.length) * 100);
+      if (mode !== "ai") {
+        setProgress(((i + 1) / files.length) * 100);
+      }
     }
 
     setResults(processed);
-    setResultsVersion((v) => v + 1); // Force re-render of result previews
+    setResultsVersion((v) => v + 1);
     setProcessing(false);
-  }, [files, tolerance, contiguousOnly, targetColor, feather]);
+    setAiPhase("");
+  }, [files, mode, aiModel, tolerance, contiguousOnly, targetColor, feather]);
 
   const handleDownload = useCallback(async () => {
     if (results.length === 0) return;
@@ -222,98 +248,172 @@ export function BackgroundRemover({
             </div>
           </div>
 
+          {/* Mode Toggle */}
+          <div className="rounded-xl bg-zinc-800/50 p-4">
+            <div className="flex gap-1 rounded-lg bg-zinc-900/60 p-1">
+              <button
+                onClick={() => setMode("color")}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+                  mode === "color"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                </svg>
+                按颜色移除
+              </button>
+              <button
+                onClick={() => setMode("ai")}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+                  mode === "ai"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                AI 智能移除
+              </button>
+            </div>
+          </div>
+
           {/* Options */}
           <div className="space-y-4 rounded-xl bg-zinc-800/50 p-4">
             <h3 className="font-medium text-zinc-300">处理选项</h3>
 
-            {/* Tolerance slider */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-zinc-400">颜色容差</label>
-                <span className="text-sm font-medium text-emerald-400">
-                  {tolerance}%
-                </span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={tolerance}
-                onChange={(e) => setTolerance(Number(e.target.value))}
-                className="w-full accent-emerald-500"
-              />
-              <p className="text-xs text-zinc-500">
-                容差越高，越多相近的颜色会被处理为透明
-              </p>
-            </div>
+            {mode === "ai" ? (
+              <>
+                {/* AI Model selector */}
+                <div className="space-y-2">
+                  <label className="text-sm text-zinc-400">AI 模型</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { value: "isnet" as AIModel, label: "标准", desc: "平衡精度与速度" },
+                      { value: "isnet_fp16" as AIModel, label: "高性能", desc: "更快速，需较好设备" },
+                      { value: "isnet_quint8" as AIModel, label: "轻量", desc: "适合低配设备" },
+                    ]).map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setAiModel(opt.value)}
+                        className={`rounded-lg border p-2 text-left transition-all ${
+                          aiModel === opt.value
+                            ? "border-emerald-500 bg-emerald-500/10"
+                            : "border-zinc-700 hover:border-zinc-500"
+                        }`}
+                      >
+                        <div className={`text-sm font-medium ${aiModel === opt.value ? "text-emerald-400" : "text-zinc-300"}`}>
+                          {opt.label}
+                        </div>
+                        <div className="text-xs text-zinc-500">{opt.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            {/* Feather slider */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-zinc-400">边缘羽化</label>
-                <span className="text-sm font-medium text-emerald-400">
-                  {feather}px
-                </span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="20"
-                value={feather}
-                onChange={(e) => setFeather(Number(e.target.value))}
-                className="w-full accent-emerald-500"
-              />
-              <p className="text-xs text-zinc-500">
-                羽化可柔化边缘，减少锯齿感
-              </p>
-            </div>
+                <div className="rounded-lg border border-zinc-700/50 bg-zinc-900/40 p-3">
+                  <div className="flex items-start gap-2">
+                    <svg className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-xs text-zinc-400">
+                      AI 模式使用深度学习模型自动识别前景主体并移除背景，无需手动选择颜色。首次使用需下载模型（约 40MB），之后会缓存在浏览器中。所有处理均在本地浏览器完成。
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Tolerance slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-zinc-400">颜色容差</label>
+                    <span className="text-sm font-medium text-emerald-400">
+                      {tolerance}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={tolerance}
+                    onChange={(e) => setTolerance(Number(e.target.value))}
+                    className="w-full accent-emerald-500"
+                  />
+                  <p className="text-xs text-zinc-500">
+                    容差越高，越多相近的颜色会被处理为透明
+                  </p>
+                </div>
 
-            {/* Contiguous toggle */}
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-sm text-zinc-400">仅处理连续像素</label>
-                <p className="text-xs text-zinc-500">
-                  开启后仅从图片四角开始填充连续的背景色
-                </p>
-              </div>
-              <button
-                onClick={() => setContiguousOnly(!contiguousOnly)}
-                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-                  contiguousOnly ? "bg-emerald-600" : "bg-zinc-600"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-                    contiguousOnly ? "left-5" : "left-0.5"
-                  }`}
-                />
-              </button>
-            </div>
+                {/* Feather slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-zinc-400">边缘羽化</label>
+                    <span className="text-sm font-medium text-emerald-400">
+                      {feather}px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    value={feather}
+                    onChange={(e) => setFeather(Number(e.target.value))}
+                    className="w-full accent-emerald-500"
+                  />
+                  <p className="text-xs text-zinc-500">
+                    羽化可柔化边缘，减少锯齿感
+                  </p>
+                </div>
 
-            {/* Color picker */}
-            <div className="space-y-2">
-              <label className="text-sm text-zinc-400">目标颜色</label>
-              <p className="text-xs text-zinc-500">
-                默认使用左上角像素颜色，或手动拾取
-              </p>
-              <ColorPicker
-                file={files[0] || null}
-                onColorPicked={(color) => {
-                  setTargetColor(color);
-                  // Auto disable contiguousOnly when manually picking color
-                  // since the target color might be in the middle of the image
-                  if (color && contiguousOnly) {
-                    setContiguousOnly(false);
-                  }
-                }}
-                selectedColor={targetColor}
-              />
-              {targetColor && !contiguousOnly && (
-                <p className="text-xs text-amber-500">
-                  已自动关闭"仅处理连续像素"，将移除图片中所有匹配的颜色
-                </p>
-              )}
-            </div>
+                {/* Contiguous toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm text-zinc-400">仅处理连续像素</label>
+                    <p className="text-xs text-zinc-500">
+                      开启后仅从图片四角开始填充连续的背景色
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setContiguousOnly(!contiguousOnly)}
+                    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                      contiguousOnly ? "bg-emerald-600" : "bg-zinc-600"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                        contiguousOnly ? "left-5" : "left-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Color picker */}
+                <div className="space-y-2">
+                  <label className="text-sm text-zinc-400">目标颜色</label>
+                  <p className="text-xs text-zinc-500">
+                    默认使用左上角像素颜色，或手动拾取
+                  </p>
+                  <ColorPicker
+                    file={files[0] || null}
+                    onColorPicked={(color) => {
+                      setTargetColor(color);
+                      if (color && contiguousOnly) {
+                        setContiguousOnly(false);
+                      }
+                    }}
+                    selectedColor={targetColor}
+                  />
+                  {targetColor && !contiguousOnly && (
+                    <p className="text-xs text-amber-500">
+                      已自动关闭"仅处理连续像素"，将移除图片中所有匹配的颜色
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Process button */}
@@ -328,14 +428,30 @@ export function BackgroundRemover({
                 style={{ width: `${progress}%` }}
               />
             )}
-            <span className="relative flex items-center justify-center gap-2">
-              {processing && (
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
+            <span className="relative flex flex-col items-center justify-center gap-1">
+              <span className="flex items-center gap-2">
+                {processing && (
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                )}
+                {processing
+                  ? `处理中 ${Math.round(progress)}%`
+                  : results.length > 0
+                    ? "重新处理"
+                    : mode === "ai"
+                      ? "AI 一键移除背景"
+                      : "开始处理"}
+              </span>
+              {processing && mode === "ai" && aiPhase && (
+                <span className="text-xs text-emerald-200/70">
+                  {aiPhase === "download" && "正在下载 AI 模型..."}
+                  {aiPhase === "inference" && "AI 推理中..."}
+                  {aiPhase === "init" && "初始化..."}
+                  {aiPhase === "processing" && "处理中..."}
+                </span>
               )}
-              {processing ? `处理中 ${Math.round(progress)}%` : results.length > 0 ? "重新处理" : "开始处理"}
             </span>
           </button>
         </div>
