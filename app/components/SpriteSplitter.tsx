@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ImageDropzone } from "./ImageDropzone";
 import { ImageLightbox } from "./ImageLightbox";
 import { DropdownMenu } from "./DropdownMenu";
-import { splitSprites, SplitResult } from "../lib/sprite-splitter";
+import { splitSprites, splitSpritesGrid, SplitResult, SplitMode } from "../lib/sprite-splitter";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
 import type { TransferData } from "../page";
 
@@ -53,6 +53,9 @@ export function SpriteSplitter({
   const [resultsVersion, setResultsVersion] = useState(0);
   const [progress, setProgress] = useState(0);
   const [lightboxImage, setLightboxImage] = useState<{ src?: string; blob?: Blob; alt: string } | null>(null);
+  const [splitMode, setSplitMode] = useState<SplitMode>("transparent");
+  const [gridColumns, setGridColumns] = useState(4);
+  const [gridRows, setGridRows] = useState(4);
 
   useEffect(() => {
     onHasFilesChange?.(files.length > 0);
@@ -104,7 +107,10 @@ export function SpriteSplitter({
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        const sprites = await splitSprites(file);
+        const sprites =
+          splitMode === "grid"
+            ? await splitSpritesGrid(file, { columns: gridColumns, rows: gridRows })
+            : await splitSprites(file);
         processed.push({ originalName: file.name, sprites });
       } catch (error) {
         console.error(`Failed to process ${file.name}:`, error);
@@ -115,7 +121,7 @@ export function SpriteSplitter({
     setResults(processed);
     setResultsVersion((v) => v + 1);
     setProcessing(false);
-  }, [files]);
+  }, [files, splitMode, gridColumns, gridRows]);
 
   const handleDownload = useCallback(async () => {
     const items: DownloadItem[] = [];
@@ -209,6 +215,66 @@ export function SpriteSplitter({
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Split mode options */}
+          <div className="rounded-xl bg-zinc-800/50 p-4">
+            <span className="mb-3 block text-sm font-medium text-zinc-300">拆分模式</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSplitMode("transparent")}
+                className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  splitMode === "transparent"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                }`}
+              >
+                透明边界
+              </button>
+              <button
+                onClick={() => setSplitMode("grid")}
+                className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  splitMode === "grid"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                }`}
+              >
+                宫格拆分
+              </button>
+            </div>
+
+            {splitMode === "grid" && (
+              <div className="mt-3 flex items-center gap-3">
+                <label className="flex items-center gap-2 text-sm text-zinc-400">
+                  列
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={gridColumns}
+                    onChange={(e) => setGridColumns(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-16 rounded-lg border border-zinc-600 bg-zinc-700 px-2 py-1 text-center text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </label>
+                <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <label className="flex items-center gap-2 text-sm text-zinc-400">
+                  行
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={gridRows}
+                    onChange={(e) => setGridRows(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-16 rounded-lg border border-zinc-600 bg-zinc-700 px-2 py-1 text-center text-sm text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </label>
+                <span className="ml-auto text-xs text-zinc-500">
+                  共 {gridColumns * gridRows} 块
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Process button */}

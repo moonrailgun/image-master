@@ -5,6 +5,13 @@ export interface SplitResult {
   height: number;
 }
 
+export type SplitMode = "transparent" | "grid";
+
+export interface GridOptions {
+  columns: number;
+  rows: number;
+}
+
 interface BoundingBox {
   minX: number;
   minY: number;
@@ -179,4 +186,55 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
       else reject(new Error("Failed to create blob"));
     }, "image/png");
   });
+}
+
+/**
+ * Split sprite sheet into a uniform grid
+ */
+export async function splitSpritesGrid(
+  file: File,
+  options: GridOptions
+): Promise<SplitResult[]> {
+  const { columns, rows } = options;
+  if (columns < 1 || rows < 1) return [];
+
+  const img = await loadImage(file);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d")!;
+
+  canvas.width = img.width;
+  canvas.height = img.height;
+  ctx.drawImage(img, 0, 0);
+
+  const cellWidth = Math.floor(img.width / columns);
+  const cellHeight = Math.floor(img.height / rows);
+  const baseName = file.name.replace(/\.[^/.]+$/, "");
+  const results: SplitResult[] = [];
+  let index = 1;
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      const x = col * cellWidth;
+      const y = row * cellHeight;
+      const w = col === columns - 1 ? img.width - x : cellWidth;
+      const h = row === rows - 1 ? img.height - y : cellHeight;
+
+      const cellCanvas = document.createElement("canvas");
+      cellCanvas.width = w;
+      cellCanvas.height = h;
+      const cellCtx = cellCanvas.getContext("2d")!;
+      cellCtx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+
+      const blob = await canvasToBlob(cellCanvas);
+      results.push({
+        name: `${baseName}_${index}.png`,
+        blob,
+        width: w,
+        height: h,
+      });
+      index++;
+    }
+  }
+
+  return results;
 }
