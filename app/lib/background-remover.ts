@@ -5,12 +5,14 @@ export interface RemoveBackgroundOptions {
   feather?: number; // 0-20 pixels
   antiAlias?: boolean;
   seedPoints?: { x: number; y: number }[];
+  edgeShrink?: number; // 0-20 pixels
 }
 
 export type AIModel = "isnet" | "isnet_fp16" | "isnet_quint8";
 
 export interface AIRemoveBackgroundOptions {
   model: AIModel;
+  edgeShrink?: number; // 0-20 pixels
   onProgress?: (phase: string, progress: number) => void;
 }
 
@@ -35,6 +37,7 @@ export async function removeBackground(
     feather = 0,
     antiAlias = true,
     seedPoints,
+    edgeShrink = 0,
   } = options;
 
   const img = await loadImage(file);
@@ -132,6 +135,10 @@ export async function removeBackground(
     gaussianBlurAlpha(data, width, height, 0.8);
   }
 
+  if (edgeShrink > 0) {
+    applyEdgeShrink(data, width, height, edgeShrink);
+  }
+
   if (feather > 0) {
     applyFeather(data, width, height, feather);
   }
@@ -175,6 +182,74 @@ function colorDistance(
   const dg = c1.g - c2.g;
   const db = c1.b - c2.b;
   return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+/**
+ * Erode the alpha mask inward by `radius` pixels using distance transform.
+ * Pixels within `radius` distance of a transparent pixel get their alpha
+ * reduced or zeroed, effectively shrinking the visible edge.
+ */
+function applyEdgeShrink(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  radius: number
+): void {
+  const len = width * height;
+  const distToTransparent = new Float32Array(len);
+  distToTransparent.fill(Infinity);
+
+  for (let i = 0; i < len; i++) {
+    if (data[i * 4 + 3] === 0) {
+      distToTransparent[i] = 0;
+    }
+  }
+
+  // Forward pass
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      if (distToTransparent[i] === 0) continue;
+      if (x > 0)
+        distToTransparent[i] = Math.min(distToTransparent[i], distToTransparent[i - 1] + 1);
+      if (y > 0)
+        distToTransparent[i] = Math.min(distToTransparent[i], distToTransparent[(y - 1) * width + x] + 1);
+      if (x > 0 && y > 0)
+        distToTransparent[i] = Math.min(distToTransparent[i], distToTransparent[(y - 1) * width + x - 1] + 1.414);
+      if (x < width - 1 && y > 0)
+        distToTransparent[i] = Math.min(distToTransparent[i], distToTransparent[(y - 1) * width + x + 1] + 1.414);
+    }
+  }
+
+  // Backward pass
+  for (let y = height - 1; y >= 0; y--) {
+    for (let x = width - 1; x >= 0; x--) {
+      const i = y * width + x;
+      if (distToTransparent[i] === 0) continue;
+      if (x < width - 1)
+        distToTransparent[i] = Math.min(distToTransparent[i], distToTransparent[i + 1] + 1);
+      if (y < height - 1)
+        distToTransparent[i] = Math.min(distToTransparent[i], distToTransparent[(y + 1) * width + x] + 1);
+      if (x < width - 1 && y < height - 1)
+        distToTransparent[i] = Math.min(distToTransparent[i], distToTransparent[(y + 1) * width + x + 1] + 1.414);
+      if (x > 0 && y < height - 1)
+        distToTransparent[i] = Math.min(distToTransparent[i], distToTransparent[(y + 1) * width + x - 1] + 1.414);
+    }
+  }
+
+  // Shrink: fully transparent within radius, smooth falloff at the edge
+  const softZone = Math.min(1, radius * 0.5);
+  for (let i = 0; i < len; i++) {
+    const d = distToTransparent[i];
+    if (d >= radius) continue;
+    if (d <= radius - softZone) {
+      data[i * 4 + 3] = 0;
+    } else {
+      const t = (d - (radius - softZone)) / softZone;
+      const smooth = t * t * (3 - 2 * t);
+      data[i * 4 + 3] = Math.round(data[i * 4 + 3] * smooth);
+    }
+  }
 }
 
 /**
@@ -474,7 +549,7 @@ export async function aiRemoveBackground(
     "@imgly/background-removal"
   );
 
-  const { model, onProgress } = options;
+  const { model, edgeShrink = 0, onProgress } = options;
 
   onProgress?.("init", 0);
 
@@ -494,7 +569,25 @@ export async function aiRemoveBackground(
 
   const resultBlob = blob instanceof Blob ? blob : new Blob([blob], { type: "image/png" });
 
-  // Get dimensions from the result
+  if (edgeShrink > 0) {
+    const img = await loadImageFromBlob(resultBlob);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d")!;
+    canvas.width = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    applyEdgeShrink(imageData.data, canvas.width, canvas.height, edgeShrink);
+    ctx.putImageData(imageData, 0, 0);
+    const shrunkBlob = await canvasToBlob(canvas);
+    return {
+      name: file.name.replace(/\.[^/.]+$/, "") + ".png",
+      blob: shrunkBlob,
+      width: canvas.width,
+      height: canvas.height,
+    };
+  }
+
   const img = await loadImageFromBlob(resultBlob);
   return {
     name: file.name.replace(/\.[^/.]+$/, "") + ".png",

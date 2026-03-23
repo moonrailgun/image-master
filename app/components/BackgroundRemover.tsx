@@ -79,6 +79,7 @@ export function BackgroundRemover({
   const [feather, setFeather] = useState(0);
   const [antiAlias, setAntiAlias] = useState(true);
   const [seedPoints, setSeedPoints] = useState<SeedPoint[]>([]);
+  const [edgeShrink, setEdgeShrink] = useState(0);
 
   // Handle incoming transfer from other module
   const lastTransferRef = useRef<TransferData | null>(null);
@@ -135,6 +136,7 @@ export function BackgroundRemover({
         if (mode === "ai") {
           result = await aiRemoveBackground(file, {
             model: aiModel,
+            edgeShrink,
             onProgress: (phase, ratio) => {
               setAiPhase(phase);
               // Per-file progress blended with overall file progress
@@ -150,6 +152,7 @@ export function BackgroundRemover({
             targetColor: targetColor ?? undefined,
             feather,
             antiAlias,
+            edgeShrink,
             seedPoints: seedPoints.length > 0 ? seedPoints : undefined,
           };
           result = await removeBackground(file, options);
@@ -176,6 +179,7 @@ export function BackgroundRemover({
     targetColor,
     feather,
     antiAlias,
+    edgeShrink,
     seedPoints,
   ]);
 
@@ -331,6 +335,27 @@ export function BackgroundRemover({
                   </div>
                 </div>
 
+                {/* Edge shrink slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-zinc-400">边缘收缩</label>
+                    <span className="text-sm font-medium text-emerald-400">
+                      {edgeShrink}px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    value={edgeShrink}
+                    onChange={(e) => setEdgeShrink(Number(e.target.value))}
+                    className="w-full accent-emerald-500"
+                  />
+                  <p className="text-xs text-zinc-500">
+                    向内收缩前景边缘，移除残留的背景像素
+                  </p>
+                </div>
+
                 <div className="rounded-lg border border-zinc-700/50 bg-zinc-900/40 p-3">
                   <div className="flex items-start gap-2">
                     <svg className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -383,6 +408,27 @@ export function BackgroundRemover({
                   />
                   <p className="text-xs text-zinc-500">
                     羽化可柔化边缘，减少锯齿感
+                  </p>
+                </div>
+
+                {/* Edge shrink slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-zinc-400">边缘收缩</label>
+                    <span className="text-sm font-medium text-emerald-400">
+                      {edgeShrink}px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    value={edgeShrink}
+                    onChange={(e) => setEdgeShrink(Number(e.target.value))}
+                    className="w-full accent-emerald-500"
+                  />
+                  <p className="text-xs text-zinc-500">
+                    向内收缩前景边缘，移除残留的背景像素
                   </p>
                 </div>
 
@@ -469,6 +515,7 @@ export function BackgroundRemover({
                 </div>
               </>
             )}
+
           </div>
 
           {/* Process button */}
