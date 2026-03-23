@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ImageDropzone } from "./ImageDropzone";
 import { ImageLightbox } from "./ImageLightbox";
 import { ColorPicker } from "./ColorPicker";
+import { PointSelector, SeedPoint } from "./PointSelector";
 import { DropdownMenu } from "./DropdownMenu";
 import {
   removeBackground,
@@ -77,6 +78,7 @@ export function BackgroundRemover({
   } | null>(null);
   const [feather, setFeather] = useState(0);
   const [antiAlias, setAntiAlias] = useState(true);
+  const [seedPoints, setSeedPoints] = useState<SeedPoint[]>([]);
 
   // Handle incoming transfer from other module
   const lastTransferRef = useRef<TransferData | null>(null);
@@ -87,6 +89,7 @@ export function BackgroundRemover({
         setFiles(pendingTransfer.files);
         setResults([]);
         setTargetColor(null);
+        setSeedPoints([]);
         onTransferConsumed?.();
       });
     }
@@ -114,6 +117,7 @@ export function BackgroundRemover({
     setFiles(selectedFiles);
     setResults([]);
     setTargetColor(null);
+    setSeedPoints([]);
   }, []);
 
   const handleProcess = useCallback(async () => {
@@ -146,6 +150,7 @@ export function BackgroundRemover({
             targetColor: targetColor ?? undefined,
             feather,
             antiAlias,
+            seedPoints: seedPoints.length > 0 ? seedPoints : undefined,
           };
           result = await removeBackground(file, options);
         }
@@ -171,6 +176,7 @@ export function BackgroundRemover({
     targetColor,
     feather,
     antiAlias,
+    seedPoints,
   ]);
 
   const handleDownload = useCallback(async () => {
@@ -192,6 +198,7 @@ export function BackgroundRemover({
     setResults([]);
     setProgress(0);
     setTargetColor(null);
+    setSeedPoints([]);
   }, []);
 
   const hasFiles = files.length > 0;
@@ -411,6 +418,7 @@ export function BackgroundRemover({
                     </p>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setContiguousOnly(!contiguousOnly)}
                     className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
                       contiguousOnly ? "bg-emerald-600" : "bg-zinc-600"
@@ -445,6 +453,19 @@ export function BackgroundRemover({
                       已自动关闭"仅处理连续像素"，将移除图片中所有匹配的颜色
                     </p>
                   )}
+                </div>
+
+                {/* Seed point selector for enclosed regions */}
+                <div className="space-y-2">
+                  <label className="text-sm text-zinc-400">封闭区域移除</label>
+                  <p className="text-xs text-zinc-500">
+                    点选被前景包围的封闭背景区域，自动以点击处颜色进行洪水填充
+                  </p>
+                  <PointSelector
+                    file={files[0] || null}
+                    points={seedPoints}
+                    onPointsChange={setSeedPoints}
+                  />
                 </div>
               </>
             )}

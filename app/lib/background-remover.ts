@@ -4,6 +4,7 @@ export interface RemoveBackgroundOptions {
   targetColor?: { r: number; g: number; b: number };
   feather?: number; // 0-20 pixels
   antiAlias?: boolean;
+  seedPoints?: { x: number; y: number }[];
 }
 
 export type AIModel = "isnet" | "isnet_fp16" | "isnet_quint8";
@@ -33,6 +34,7 @@ export async function removeBackground(
     targetColor,
     feather = 0,
     antiAlias = true,
+    seedPoints,
   } = options;
 
   const img = await loadImage(file);
@@ -56,9 +58,9 @@ export async function removeBackground(
   const maxDistance = 441.67;
   const toleranceDistance = (tolerance / 100) * maxDistance;
 
-  if (contiguousOnly) {
-    const visited = new Uint8Array(width * height);
+  const visited = new Uint8Array(width * height);
 
+  if (contiguousOnly) {
     for (let x = 0; x < width; x++) {
       floodFillRemove(
         data, visited, width, height, x, 0, bgColor, toleranceDistance
@@ -75,12 +77,6 @@ export async function removeBackground(
         data, visited, width, height, width - 1, y, bgColor, toleranceDistance
       );
     }
-
-    if (antiAlias) {
-      applyBoundarySoftening(
-        data, visited, width, height, bgColor, toleranceDistance
-      );
-    }
   } else {
     if (antiAlias) {
       const innerT = toleranceDistance * 0.85;
@@ -92,6 +88,7 @@ export async function removeBackground(
         );
         if (dist <= innerT) {
           data[i + 3] = 0;
+          visited[i / 4] = 1;
         } else if (dist < outerT) {
           const t = (dist - innerT) / (outerT - innerT);
           const smooth = t * t * (3 - 2 * t);
@@ -107,12 +104,31 @@ export async function removeBackground(
           ) <= toleranceDistance
         ) {
           data[i + 3] = 0;
+          visited[i / 4] = 1;
         }
       }
     }
   }
 
+  if (seedPoints && seedPoints.length > 0) {
+    for (const pt of seedPoints) {
+      if (pt.x < 0 || pt.x >= width || pt.y < 0 || pt.y >= height) continue;
+      const seedIdx = (pt.y * width + pt.x) * 4;
+      const seedColor = {
+        r: data[seedIdx],
+        g: data[seedIdx + 1],
+        b: data[seedIdx + 2],
+      };
+      floodFillRemove(
+        data, visited, width, height, pt.x, pt.y, seedColor, toleranceDistance
+      );
+    }
+  }
+
   if (antiAlias) {
+    applyBoundarySoftening(
+      data, visited, width, height, bgColor, toleranceDistance
+    );
     gaussianBlurAlpha(data, width, height, 0.8);
   }
 
