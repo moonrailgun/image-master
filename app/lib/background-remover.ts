@@ -3,6 +3,7 @@ export interface RemoveBackgroundOptions {
   contiguousOnly: boolean;
   targetColor?: { r: number; g: number; b: number };
   feather?: number; // 0-20 pixels
+  antiAlias?: boolean;
 }
 
 export type AIModel = "isnet" | "isnet_fp16" | "isnet_quint8";
@@ -26,7 +27,13 @@ export async function removeBackground(
   file: File,
   options: RemoveBackgroundOptions
 ): Promise<RemoveResult> {
-  const { tolerance, contiguousOnly, targetColor, feather = 0 } = options;
+  const {
+    tolerance,
+    contiguousOnly,
+    targetColor,
+    feather = 0,
+    antiAlias = true,
+  } = options;
 
   const img = await loadImage(file);
   const canvas = document.createElement("canvas");
@@ -39,7 +46,6 @@ export async function removeBackground(
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const { width, height, data } = imageData;
 
-  // Get target color from top-left pixel if not specified
   const topLeftColor = {
     r: data[0],
     g: data[1],
@@ -47,35 +53,69 @@ export async function removeBackground(
   };
   const bgColor = targetColor ?? topLeftColor;
 
-  // Max distance in RGB space is sqrt(255^2 * 3) ≈ 441.67
   const maxDistance = 441.67;
   const toleranceDistance = (tolerance / 100) * maxDistance;
 
   if (contiguousOnly) {
-    // Flood fill from all edge pixels that match the target color
     const visited = new Uint8Array(width * height);
 
-    // Top and bottom edges
     for (let x = 0; x < width; x++) {
-      floodFillRemove(data, visited, width, height, x, 0, bgColor, toleranceDistance);
-      floodFillRemove(data, visited, width, height, x, height - 1, bgColor, toleranceDistance);
+      floodFillRemove(
+        data, visited, width, height, x, 0, bgColor, toleranceDistance
+      );
+      floodFillRemove(
+        data, visited, width, height, x, height - 1, bgColor, toleranceDistance
+      );
     }
-    // Left and right edges (skip corners already processed)
     for (let y = 1; y < height - 1; y++) {
-      floodFillRemove(data, visited, width, height, 0, y, bgColor, toleranceDistance);
-      floodFillRemove(data, visited, width, height, width - 1, y, bgColor, toleranceDistance);
+      floodFillRemove(
+        data, visited, width, height, 0, y, bgColor, toleranceDistance
+      );
+      floodFillRemove(
+        data, visited, width, height, width - 1, y, bgColor, toleranceDistance
+      );
+    }
+
+    if (antiAlias) {
+      applyBoundarySoftening(
+        data, visited, width, height, bgColor, toleranceDistance
+      );
     }
   } else {
-    // Remove all matching pixels
-    for (let i = 0; i < data.length; i += 4) {
-      const pixelColor = { r: data[i], g: data[i + 1], b: data[i + 2] };
-      if (colorDistance(pixelColor, bgColor) <= toleranceDistance) {
-        data[i + 3] = 0; // Set alpha to 0
+    if (antiAlias) {
+      const innerT = toleranceDistance * 0.85;
+      const outerT = toleranceDistance * 1.15;
+      for (let i = 0; i < data.length; i += 4) {
+        const dist = colorDistance(
+          { r: data[i], g: data[i + 1], b: data[i + 2] },
+          bgColor
+        );
+        if (dist <= innerT) {
+          data[i + 3] = 0;
+        } else if (dist < outerT) {
+          const t = (dist - innerT) / (outerT - innerT);
+          const smooth = t * t * (3 - 2 * t);
+          data[i + 3] = Math.round(data[i + 3] * smooth);
+        }
+      }
+    } else {
+      for (let i = 0; i < data.length; i += 4) {
+        if (
+          colorDistance(
+            { r: data[i], g: data[i + 1], b: data[i + 2] },
+            bgColor
+          ) <= toleranceDistance
+        ) {
+          data[i + 3] = 0;
+        }
       }
     }
   }
 
-  // Apply feather effect if specified
+  if (antiAlias) {
+    gaussianBlurAlpha(data, width, height, 0.8);
+  }
+
   if (feather > 0) {
     applyFeather(data, width, height, feather);
   }
@@ -203,6 +243,156 @@ function applyFeather(
       const t = distance[i] / radius;
       const falloff = (1 - Math.cos(t * Math.PI)) / 2;
       data[i * 4 + 3] = Math.round(alpha[i] * falloff);
+    }
+  }
+}
+
+/**
+ * Smooth the boundary between flood-fill-removed region and foreground
+ * using distance transform + color distance for soft alpha transition.
+ */
+function applyBoundarySoftening(
+  data: Uint8ClampedArray,
+  visited: Uint8Array,
+  width: number,
+  height: number,
+  bgColor: { r: number; g: number; b: number },
+  toleranceDistance: number
+): void {
+  const len = width * height;
+  const band = 2.5;
+  const outerTolerance = toleranceDistance * 1.5;
+
+  const distToRemoved = new Float32Array(len);
+  distToRemoved.fill(999);
+  for (let i = 0; i < len; i++) {
+    if (visited[i]) distToRemoved[i] = 0;
+  }
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      if (distToRemoved[i] === 0) continue;
+      if (x > 0)
+        distToRemoved[i] = Math.min(distToRemoved[i], distToRemoved[i - 1] + 1);
+      if (y > 0)
+        distToRemoved[i] = Math.min(
+          distToRemoved[i],
+          distToRemoved[(y - 1) * width + x] + 1
+        );
+      if (x > 0 && y > 0)
+        distToRemoved[i] = Math.min(
+          distToRemoved[i],
+          distToRemoved[(y - 1) * width + x - 1] + 1.414
+        );
+      if (x < width - 1 && y > 0)
+        distToRemoved[i] = Math.min(
+          distToRemoved[i],
+          distToRemoved[(y - 1) * width + x + 1] + 1.414
+        );
+    }
+  }
+
+  for (let y = height - 1; y >= 0; y--) {
+    for (let x = width - 1; x >= 0; x--) {
+      const i = y * width + x;
+      if (distToRemoved[i] === 0) continue;
+      if (x < width - 1)
+        distToRemoved[i] = Math.min(distToRemoved[i], distToRemoved[i + 1] + 1);
+      if (y < height - 1)
+        distToRemoved[i] = Math.min(
+          distToRemoved[i],
+          distToRemoved[(y + 1) * width + x] + 1
+        );
+      if (x < width - 1 && y < height - 1)
+        distToRemoved[i] = Math.min(
+          distToRemoved[i],
+          distToRemoved[(y + 1) * width + x + 1] + 1.414
+        );
+      if (x > 0 && y < height - 1)
+        distToRemoved[i] = Math.min(
+          distToRemoved[i],
+          distToRemoved[(y + 1) * width + x - 1] + 1.414
+        );
+    }
+  }
+
+  for (let i = 0; i < len; i++) {
+    if (visited[i]) continue;
+    if (distToRemoved[i] > band) continue;
+
+    const pixelIdx = i * 4;
+    const dist = colorDistance(
+      { r: data[pixelIdx], g: data[pixelIdx + 1], b: data[pixelIdx + 2] },
+      bgColor
+    );
+
+    if (dist >= outerTolerance) continue;
+
+    const spatialT = distToRemoved[i] / band;
+    const colorT = dist / outerTolerance;
+    const t = Math.max(spatialT, colorT);
+    const smooth = t * t * (3 - 2 * t);
+
+    data[pixelIdx + 3] = Math.round(data[pixelIdx + 3] * smooth);
+  }
+}
+
+/**
+ * Separable Gaussian blur applied only to the alpha channel.
+ * Smooths staircase artifacts at transparent/opaque boundaries.
+ */
+function gaussianBlurAlpha(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  sigma: number
+): void {
+  if (sigma <= 0) return;
+
+  const radius = Math.ceil(sigma * 2.5);
+  const kernelSize = radius * 2 + 1;
+  const kernel = new Float32Array(kernelSize);
+
+  let sum = 0;
+  for (let i = 0; i < kernelSize; i++) {
+    const x = i - radius;
+    kernel[i] = Math.exp(-(x * x) / (2 * sigma * sigma));
+    sum += kernel[i];
+  }
+  for (let i = 0; i < kernelSize; i++) {
+    kernel[i] /= sum;
+  }
+
+  const len = width * height;
+  const alpha = new Float32Array(len);
+  const temp = new Float32Array(len);
+
+  for (let i = 0; i < len; i++) {
+    alpha[i] = data[i * 4 + 3];
+  }
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let val = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const sx = Math.min(Math.max(x + k, 0), width - 1);
+        val += alpha[y * width + sx] * kernel[k + radius];
+      }
+      temp[y * width + x] = val;
+    }
+  }
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let val = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const sy = Math.min(Math.max(y + k, 0), height - 1);
+        val += temp[sy * width + x] * kernel[k + radius];
+      }
+      data[(y * width + x) * 4 + 3] = Math.round(
+        Math.max(0, Math.min(255, val))
+      );
     }
   }
 }

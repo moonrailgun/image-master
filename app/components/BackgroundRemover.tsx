@@ -76,6 +76,7 @@ export function BackgroundRemover({
     b: number;
   } | null>(null);
   const [feather, setFeather] = useState(0);
+  const [antiAlias, setAntiAlias] = useState(true);
 
   // Handle incoming transfer from other module
   const lastTransferRef = useRef<TransferData | null>(null);
@@ -144,6 +145,7 @@ export function BackgroundRemover({
             contiguousOnly,
             targetColor: targetColor ?? undefined,
             feather,
+            antiAlias,
           };
           result = await removeBackground(file, options);
         }
@@ -160,7 +162,16 @@ export function BackgroundRemover({
     setResultsVersion((v) => v + 1);
     setProcessing(false);
     setAiPhase("");
-  }, [files, mode, aiModel, tolerance, contiguousOnly, targetColor, feather]);
+  }, [
+    files,
+    mode,
+    aiModel,
+    tolerance,
+    contiguousOnly,
+    targetColor,
+    feather,
+    antiAlias,
+  ]);
 
   const handleDownload = useCallback(async () => {
     if (results.length === 0) return;
@@ -366,6 +377,29 @@ export function BackgroundRemover({
                   <p className="text-xs text-zinc-500">
                     羽化可柔化边缘，减少锯齿感
                   </p>
+                </div>
+
+                {/* Anti-alias toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm text-zinc-400">边缘抗锯齿</label>
+                    <p className="text-xs text-zinc-500">
+                      平滑边缘曲线，减少颗粒感和锯齿
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAntiAlias(!antiAlias)}
+                    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                      antiAlias ? "bg-emerald-600" : "bg-zinc-600"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                        antiAlias ? "left-5" : "left-0.5"
+                      }`}
+                    />
+                  </button>
                 </div>
 
                 {/* Contiguous toggle */}
