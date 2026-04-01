@@ -11,7 +11,7 @@ import { ImageInpainting } from "./components/ImageInpainting";
 import { ImageCropper } from "./components/ImageCropper";
 import { ImageVectorizer } from "./components/ImageVectorizer";
 
-type Tab = "sprite" | "background" | "upscale" | "resize" | "compress" | "transform" | "inpaint" | "crop" | "vectorize";
+type Tab = "background" | "sprite" | "upscale" | "resize" | "compress" | "transform" | "inpaint" | "crop" | "vectorize";
 
 export interface TransferData {
   files: File[];
@@ -19,7 +19,7 @@ export interface TransferData {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<Tab>("sprite");
+  const [activeTab, setActiveTab] = useState<Tab>("background");
   const [pendingTransfer, setPendingTransfer] = useState<TransferData | null>(null);
   const [spriteHasFiles, setSpriteHasFiles] = useState(false);
   const [backgroundHasFiles, setBackgroundHasFiles] = useState(false);
@@ -139,25 +139,6 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6">
           <nav className="flex gap-1">
             <TabButton
-              active={activeTab === "sprite"}
-              onClick={() => setActiveTab("sprite")}
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
-                />
-              </svg>
-              精灵图拆分
-            </TabButton>
-            <TabButton
               active={activeTab === "background"}
               onClick={() => setActiveTab("background")}
             >
@@ -181,6 +162,25 @@ export default function Home() {
                 />
               </svg>
               背景扣除
+            </TabButton>
+            <TabButton
+              active={activeTab === "sprite"}
+              onClick={() => setActiveTab("sprite")}
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
+                />
+              </svg>
+              精灵图拆分
             </TabButton>
             <TabButton
               active={activeTab === "upscale"}
@@ -324,6 +324,16 @@ export default function Home() {
         {/* Tool Description */}
         {showDescription && (
           <div className="mb-8">
+            {activeTab === "background" && (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+                <h2 className="mb-2 text-xl font-semibold text-white">
+                  背景扣除工具
+                </h2>
+                <p className="text-zinc-400">
+                  上传带纯色背景的图片，自动将背景色处理为透明。支持自动检测、手动拾取颜色、调整容差范围。
+                </p>
+              </div>
+            )}
             {activeTab === "sprite" && (
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
                 <h2 className="mb-2 text-xl font-semibold text-white">
@@ -332,16 +342,6 @@ export default function Home() {
                 <p className="text-zinc-400">
                   上传带透明通道的 PNG 图片（如游戏 UI
                   精灵图集），自动按照透明区域间隙识别并拆分成独立的小图片。
-                </p>
-              </div>
-            )}
-            {activeTab === "background" && (
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-                <h2 className="mb-2 text-xl font-semibold text-white">
-                  背景扣除工具
-                </h2>
-                <p className="text-zinc-400">
-                  上传带纯色背景的图片，自动将背景色处理为透明。支持自动检测、手动拾取颜色、调整容差范围。
                 </p>
               </div>
             )}
@@ -419,22 +419,6 @@ export default function Home() {
         )}
 
         {/* Tool Content */}
-        <div className={activeTab === "sprite" ? "block" : "hidden"}>
-          <SpriteSplitter
-            pendingTransfer={pendingTransfer?.fromModule !== "sprite" ? pendingTransfer : null}
-            onTransferConsumed={handleTransferConsumed}
-            onSendToBackground={(files) => handleSendToBackground(files, "sprite")}
-            onSendToUpscale={(files) => handleSendToUpscale(files, "sprite")}
-            onSendToResize={(files) => handleSendToResize(files, "sprite")}
-            onSendToCompress={(files) => handleSendToCompress(files, "sprite")}
-            onSendToTransform={(files) => handleSendToTransform(files, "sprite")}
-            onSendToInpaint={(files) => handleSendToInpaint(files, "sprite")}
-            onSendToCrop={(files) => handleSendToCrop(files, "sprite")}
-            onSendToVectorize={(files) => handleSendToVectorize(files, "sprite")}
-            onHasFilesChange={setSpriteHasFiles}
-            isActive={activeTab === "sprite"}
-          />
-        </div>
         <div className={activeTab === "background" ? "block" : "hidden"}>
           <BackgroundRemover
             pendingTransfer={pendingTransfer?.fromModule !== "background" ? pendingTransfer : null}
@@ -449,6 +433,22 @@ export default function Home() {
             onSendToVectorize={(files) => handleSendToVectorize(files, "background")}
             onHasFilesChange={setBackgroundHasFiles}
             isActive={activeTab === "background"}
+          />
+        </div>
+        <div className={activeTab === "sprite" ? "block" : "hidden"}>
+          <SpriteSplitter
+            pendingTransfer={pendingTransfer?.fromModule !== "sprite" ? pendingTransfer : null}
+            onTransferConsumed={handleTransferConsumed}
+            onSendToBackground={(files) => handleSendToBackground(files, "sprite")}
+            onSendToUpscale={(files) => handleSendToUpscale(files, "sprite")}
+            onSendToResize={(files) => handleSendToResize(files, "sprite")}
+            onSendToCompress={(files) => handleSendToCompress(files, "sprite")}
+            onSendToTransform={(files) => handleSendToTransform(files, "sprite")}
+            onSendToInpaint={(files) => handleSendToInpaint(files, "sprite")}
+            onSendToCrop={(files) => handleSendToCrop(files, "sprite")}
+            onSendToVectorize={(files) => handleSendToVectorize(files, "sprite")}
+            onHasFilesChange={setSpriteHasFiles}
+            isActive={activeTab === "sprite"}
           />
         </div>
         <div className={activeTab === "upscale" ? "block" : "hidden"}>
