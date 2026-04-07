@@ -171,6 +171,9 @@ export function ImageLightbox({ src, blob, alt, onClose }: ImageLightboxProps) {
     img.src = imageUrl;
   }, [imageUrl, blob, src]);
 
+  type PreviewBg = "checker" | "white" | "black" | "red" | "green" | "blue";
+  const [previewBg, setPreviewBg] = useState<PreviewBg>("checker");
+
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef({ startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false });
@@ -245,7 +248,8 @@ export function ImageLightbox({ src, blob, alt, onClose }: ImageLightboxProps) {
     });
   }, [clampPosition]);
 
-  const handleBackdropClick = useCallback(() => {
+  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget) return;
     if (dragRef.current.moved) {
       dragRef.current.moved = false;
       return;
@@ -501,7 +505,15 @@ export function ImageLightbox({ src, blob, alt, onClose }: ImageLightboxProps) {
       {/* Image container */}
       <div
         ref={imageContainerRef}
-        className="relative rounded-lg bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[20px_20px]"
+        className={`relative rounded-lg ${
+          previewBg === "checker"
+            ? "bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[20px_20px]"
+            : previewBg === "white" ? "bg-white"
+            : previewBg === "black" ? "bg-black"
+            : previewBg === "red" ? "bg-red-500"
+            : previewBg === "green" ? "bg-green-500"
+            : "bg-blue-500"
+        }`}
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={handleImageDoubleClick}
         style={{
@@ -520,14 +532,40 @@ export function ImageLightbox({ src, blob, alt, onClose }: ImageLightboxProps) {
         />
       </div>
 
-      {/* Hint */}
+      {/* Bottom bar */}
       <div
-        className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-zinc-800/80 px-4 py-2 text-sm text-zinc-400"
+        className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3"
         onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
-        {isTransformed
-          ? `${Math.round(transform.scale * 100)}% · 双击或按 0 重置 · 拖拽平移`
-          : "滚轮缩放 · 双击放大 · 按 ESC 或点击背景关闭"}
+        {imageInfo?.hasAlpha && (
+          <div className="flex items-center gap-1 rounded-full bg-zinc-800/80 px-3 py-2">
+            {([
+              { value: "checker" as PreviewBg, label: "棋盘", className: "bg-[repeating-conic-gradient(#555_0%_25%,#888_0%_50%)] bg-size-[6px_6px]" },
+              { value: "white" as PreviewBg, label: "白色", className: "bg-white" },
+              { value: "black" as PreviewBg, label: "黑色", className: "bg-black" },
+              { value: "red" as PreviewBg, label: "红色", className: "bg-red-500" },
+              { value: "green" as PreviewBg, label: "绿色", className: "bg-green-500" },
+              { value: "blue" as PreviewBg, label: "蓝色", className: "bg-blue-500" },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setPreviewBg(opt.value)}
+                title={opt.label}
+                className={`h-5 w-5 rounded-full border transition-all ${opt.className} ${
+                  previewBg === opt.value
+                    ? "border-emerald-400 ring-2 ring-emerald-400/50 scale-110"
+                    : "border-zinc-500 hover:border-zinc-300"
+                }`}
+              />
+            ))}
+          </div>
+        )}
+        <div className="rounded-full bg-zinc-800/80 px-4 py-2 text-sm text-zinc-400">
+          {isTransformed
+            ? `${Math.round(transform.scale * 100)}% · 双击或按 0 重置 · 拖拽平移`
+            : "滚轮缩放 · 双击放大 · 按 ESC 或点击背景关闭"}
+        </div>
       </div>
     </div>
   );

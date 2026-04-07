@@ -10,6 +10,17 @@ export interface RemoveBackgroundOptions {
 
 export type AIModel = "isnet" | "isnet_fp16" | "isnet_quint8";
 
+export type ChannelSource = "red" | "green" | "blue" | "luminance" | "saturation";
+
+export interface ChannelMattingOptions {
+  channel: ChannelSource;
+  minThreshold: number; // 0-255, channel values below → transparent
+  maxThreshold: number; // 0-255, channel values above → transparent
+  invert: boolean;
+  feather?: number;
+  edgeShrink?: number;
+}
+
 export interface AIRemoveBackgroundOptions {
   model: AIModel;
   edgeShrink?: number; // 0-20 pixels
@@ -594,6 +605,117 @@ export async function aiRemoveBackground(
     blob: resultBlob,
     width: img.width,
     height: img.height,
+  };
+}
+
+/**
+ * Extract channel value from pixel
+ */
+export function getChannelValue(
+  r: number,
+  g: number,
+  b: number,
+  channel: ChannelSource
+): number {
+  switch (channel) {
+    case "red":
+      return r;
+    case "green":
+      return g;
+    case "blue":
+      return b;
+    case "luminance":
+      return 0.299 * r + 0.587 * g + 0.114 * b;
+    case "saturation": {
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      return max === 0 ? 0 : ((max - min) / max) * 255;
+    }
+  }
+}
+
+/**
+ * Remove background using color channel threshold.
+ * Pixels whose channel value falls within [minThreshold, maxThreshold] are kept;
+ * pixels outside are made transparent with smooth edge transitions.
+ * Existing semi-transparent pixels are respected.
+ */
+export async function channelMatting(
+  file: File,
+  options: ChannelMattingOptions
+): Promise<RemoveResult> {
+  const {
+    channel,
+    minThreshold,
+    maxThreshold,
+    invert,
+    feather = 0,
+    edgeShrink = 0,
+  } = options;
+
+  const img = await loadImage(file);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d")!;
+
+  canvas.width = img.width;
+  canvas.height = img.height;
+  ctx.drawImage(img, 0, 0);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { width, height, data } = imageData;
+
+  // Soft edge width for smooth transitions at threshold boundaries
+  const softEdge = Math.max(Math.min((maxThreshold - minThreshold) * 0.08, 8), 1);
+
+  // Build a 256-entry LUT
+  const lut = new Uint8Array(256);
+  for (let v = 0; v < 256; v++) {
+    let alpha: number;
+
+    if (v < minThreshold - softEdge || v > maxThreshold + softEdge) {
+      alpha = 0;
+    } else if (v < minThreshold) {
+      const t = (v - (minThreshold - softEdge)) / softEdge;
+      alpha = t * t * (3 - 2 * t) * 255;
+    } else if (v > maxThreshold) {
+      const t = ((maxThreshold + softEdge) - v) / softEdge;
+      alpha = t * t * (3 - 2 * t) * 255;
+    } else {
+      alpha = 255;
+    }
+
+    if (invert) alpha = 255 - alpha;
+    lut[v] = Math.round(alpha);
+  }
+
+  for (let i = 0; i < data.length; i += 4) {
+    const origAlpha = data[i + 3];
+    if (origAlpha === 0) continue;
+
+    const value = getChannelValue(data[i], data[i + 1], data[i + 2], channel);
+    const channelAlpha = lut[Math.round(Math.max(0, Math.min(255, value)))];
+
+    // Combine with existing alpha
+    const newAlpha = Math.round((origAlpha / 255) * channelAlpha);
+    data[i + 3] = newAlpha;
+  }
+
+  if (edgeShrink > 0) {
+    applyEdgeShrink(data, width, height, edgeShrink);
+  }
+
+  if (feather > 0) {
+    applyFeather(data, width, height, feather);
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+
+  const blob = await canvasToBlob(canvas);
+  return {
+    name: file.name.replace(/\.[^/.]+$/, "") + ".png",
+    blob,
+    width: canvas.width,
+    height: canvas.height,
   };
 }
 
