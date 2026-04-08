@@ -13,7 +13,7 @@ import {
   InpaintingProgress,
 } from "../lib/image-inpainting";
 import { downloadSingle } from "../lib/download";
-import type { TransferData } from "../page";
+import type { TransferData } from "../types";
 
 interface ImageInpaintingProps {
   pendingTransfer?: TransferData | null;

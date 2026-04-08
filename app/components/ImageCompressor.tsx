@@ -13,7 +13,7 @@ import {
   CompressResult,
 } from "../lib/image-compressor";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
-import type { TransferData } from "../page";
+import type { TransferData } from "../types";
 
 interface FilePreview {
   file: File;

@@ -14,7 +14,7 @@ import {
   PRESET_LABELS,
 } from "../lib/image-vectorizer";
 import { downloadAsZip, downloadSingle } from "../lib/download";
-import type { TransferData } from "../page";
+import type { TransferData } from "../types";
 
 type SvgViewMode = "compare" | "sideBySide" | "svgOnly";
 type SvgBackground = "white" | "dark" | "checkerboard";

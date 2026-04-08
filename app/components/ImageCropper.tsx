@@ -15,7 +15,7 @@ import {
   getTrimTransparentArea,
 } from "../lib/image-cropper";
 import { downloadSingle } from "../lib/download";
-import type { TransferData } from "../page";
+import type { TransferData } from "../types";
 
 interface ImageCropperProps {
   pendingTransfer?: TransferData | null;

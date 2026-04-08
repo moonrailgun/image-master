@@ -6,7 +6,7 @@ import { ImageLightbox } from "./ImageLightbox";
 import { DropdownMenu } from "./DropdownMenu";
 import { splitSprites, splitSpritesGrid, SplitResult, SplitMode } from "../lib/sprite-splitter";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
-import type { TransferData } from "../page";
+import type { TransferData } from "../types";
 
 interface ProcessedFile {
   originalName: string;
