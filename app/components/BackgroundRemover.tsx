@@ -87,6 +87,7 @@ export function BackgroundRemover({
   } | null>(null);
   const [feather, setFeather] = useState(0);
   const [antiAlias, setAntiAlias] = useState(true);
+  const [chromaKey, setChromaKey] = useState(true);
   const [seedPoints, setSeedPoints] = useState<SeedPoint[]>([]);
   const [edgeShrink, setEdgeShrink] = useState(0);
 
@@ -169,6 +170,7 @@ export function BackgroundRemover({
             targetColor: targetColor ?? undefined,
             feather,
             antiAlias,
+            chromaKey,
             edgeShrink,
             seedPoints: seedPoints.length > 0 ? seedPoints : undefined,
           };
@@ -196,6 +198,7 @@ export function BackgroundRemover({
     targetColor,
     feather,
     antiAlias,
+    chromaKey,
     edgeShrink,
     seedPoints,
     channelSource,
@@ -627,6 +630,37 @@ export function BackgroundRemover({
                   </button>
                 </div>
 
+                {/* Chroma key toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label
+                      htmlFor="chroma-key-toggle"
+                      className="text-sm text-zinc-400"
+                    >
+                      Chroma key
+                    </label>
+                    <p className="text-xs text-zinc-500">
+                      适合绿幕或纯色背景，仅净化抠图边缘并减少溢色锯齿
+                    </p>
+                  </div>
+                  <button
+                    id="chroma-key-toggle"
+                    type="button"
+                    role="switch"
+                    aria-checked={chromaKey}
+                    onClick={() => setChromaKey(!chromaKey)}
+                    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                      chromaKey ? "bg-emerald-600" : "bg-zinc-600"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                        chromaKey ? "left-5" : "left-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+
                 {/* Contiguous toggle */}
                 <div className="flex items-center justify-between">
                   <div>
@@ -668,7 +702,7 @@ export function BackgroundRemover({
                   />
                   {targetColor && !contiguousOnly && (
                     <p className="text-xs text-amber-500">
-                      已自动关闭"仅处理连续像素"，将移除图片中所有匹配的颜色
+                      已自动关闭&quot;仅处理连续像素&quot;，将移除图片中所有匹配的颜色
                     </p>
                   )}
                 </div>
@@ -891,7 +925,7 @@ export function BackgroundRemover({
 
             {results.length === 0 ? (
               <div className="flex min-h-[200px] items-center justify-center text-zinc-600">
-                <p>点击"开始处理"处理图片</p>
+                <p>点击&quot;开始处理&quot;处理图片</p>
               </div>
             ) : (
               <div className="max-h-[400px] overflow-y-auto">
