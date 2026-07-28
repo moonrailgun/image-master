@@ -757,6 +757,7 @@ export function ImageInpainting({
               showCompare ? (
                 <div className="overflow-hidden rounded-lg border border-zinc-700 bg-[repeating-conic-gradient(#1a1a1a_0%_25%,#2a2a2a_0%_50%)] bg-size-[16px_16px]">
                   <ImageCompare
+                    persistKey="image-inpainting"
                     beforeSrc={imageUrl || undefined}
                     afterBlob={result.blob}
                     beforeAlt="原图"

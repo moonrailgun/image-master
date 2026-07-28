@@ -682,6 +682,7 @@ export function ImageVectorizer({
                 result={result}
                 originalFile={files[i]}
                 originalPreview={previews[i]?.url}
+                persistKey={`image-vectorizer-${i}`}
                 viewMode={viewMode}
                 background={svgBackground}
                 onZoom={(info, alt) => setLightboxImage({ ...info, alt })}
@@ -716,6 +717,7 @@ function SvgResultPreview({
   result,
   originalFile,
   originalPreview,
+  persistKey,
   viewMode,
   background,
   onZoom,
@@ -723,6 +725,7 @@ function SvgResultPreview({
   result: VectorizeResult;
   originalFile?: File;
   originalPreview?: string;
+  persistKey: string;
   viewMode: SvgViewMode;
   background: SvgBackground;
   onZoom: (info: { blob?: Blob; src?: string }, alt: string) => void;
@@ -787,6 +790,7 @@ function SvgResultPreview({
       {viewMode === "compare" && originalPreview ? (
         <div className={`overflow-hidden rounded-lg border border-zinc-700 ${bgClass}`}>
           <ImageCompare
+            persistKey={persistKey}
             beforeSrc={originalPreview}
             afterBlob={svgBlob}
             beforeAlt="原图"
