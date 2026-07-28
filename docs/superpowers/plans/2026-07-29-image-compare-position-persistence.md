@@ -156,4 +156,3 @@ Expected: Next.js production build and TypeScript checks complete successfully.
 git add app/components/ImageInpainting.tsx app/components/SuperResolution.tsx app/components/ImageVectorizer.tsx
 git commit -m "feat(compare): identify persistent image slots"
 ```
-
