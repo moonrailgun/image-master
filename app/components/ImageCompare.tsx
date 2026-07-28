@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  readImageComparePosition,
+  writeImageComparePosition,
+} from "./image-compare-position";
 
 interface ImageCompareProps {
   beforeSrc?: string;
@@ -10,6 +14,7 @@ interface ImageCompareProps {
   beforeAlt?: string;
   afterAlt?: string;
   className?: string;
+  persistKey?: string;
 }
 
 export function ImageCompare({
@@ -20,12 +25,27 @@ export function ImageCompare({
   beforeAlt = "Before",
   afterAlt = "After",
   className = "",
+  persistKey,
 }: ImageCompareProps) {
-  const [position, setPosition] = useState(50);
+  const [position, setPosition] = useState(() =>
+    readImageComparePosition(persistKey)
+  );
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [beforeUrl, setBeforeUrl] = useState<string | null>(null);
   const [afterUrl, setAfterUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPosition(readImageComparePosition(persistKey));
+  }, [persistKey]);
+
+  const updatePosition = useCallback(
+    (nextPosition: number) => {
+      setPosition(nextPosition);
+      writeImageComparePosition(persistKey, nextPosition);
+    },
+    [persistKey]
+  );
 
   // Create object URLs for blobs
   useEffect(() => {
@@ -55,9 +75,9 @@ export function ImageCompare({
       const rect = containerRef.current.getBoundingClientRect();
       const x = clientX - rect.left;
       const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
-      setPosition(percentage);
+      updatePosition(percentage);
     },
-    []
+    [updatePosition]
   );
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -77,7 +97,7 @@ export function ImageCompare({
     setIsDragging(false);
   }, []);
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+  const handleTouchStart = useCallback(() => {
     setIsDragging(true);
   }, []);
 
