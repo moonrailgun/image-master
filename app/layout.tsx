@@ -75,6 +75,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
+      <head>
+        <script
+          async
+          defer
+          src="https://app.tianji.dev/tracker.js"
+          data-website-id="cms4xl5oyfdt0m0fvq9s1tnmn"
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
