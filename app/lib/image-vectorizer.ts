@@ -38,6 +38,24 @@ export const PRESET_LABELS: Record<VectorizePreset, string> = {
   artistic4: "艺术风格 4",
 };
 
+export const PRESET_ORDER = Object.keys(
+  PRESET_LABELS
+) as readonly VectorizePreset[];
+
+export function getNextVectorizePreset(
+  currentPreset: string
+): VectorizePreset {
+  const currentIndex = PRESET_ORDER.indexOf(
+    currentPreset as VectorizePreset
+  );
+
+  if (currentIndex === -1) {
+    return PRESET_ORDER[0];
+  }
+
+  return PRESET_ORDER[(currentIndex + 1) % PRESET_ORDER.length];
+}
+
 export interface VectorizeOptions {
   preset?: VectorizePreset;
   numberofcolors?: number;
