@@ -7,6 +7,7 @@ import { ImageCompare } from "./ImageCompare";
 import { DropdownMenu } from "./DropdownMenu";
 import { useToast } from "./Toast";
 import {
+  getNextVectorizePreset,
   vectorizeImages,
   VectorizeOptions,
   VectorizeResult,
@@ -207,7 +208,9 @@ export function ImageVectorizer({
     setResults([]);
   }, []);
 
-  const handleVectorize = useCallback(async () => {
+  const handleVectorize = useCallback(async (
+    runPreset: VectorizePreset = preset
+  ) => {
     if (files.length === 0) return;
 
     setProcessing(true);
@@ -217,7 +220,7 @@ export function ImageVectorizer({
 
     try {
       const options: VectorizeOptions = {
-        preset,
+        preset: runPreset,
       };
 
       if (useCustomOptions) {
@@ -280,6 +283,12 @@ export function ImageVectorizer({
     strokeWidth,
     showToast,
   ]);
+
+  const handleNextPreset = useCallback(() => {
+    const nextPreset = getNextVectorizePreset(preset);
+    setPreset(nextPreset);
+    void handleVectorize(nextPreset);
+  }, [preset, handleVectorize]);
 
   const handleDownload = useCallback(async () => {
     if (results.length === 0) return;
@@ -491,17 +500,42 @@ export function ImageVectorizer({
           {/* Preset */}
           <div className="mb-3">
             <label className="mb-1.5 block text-xs text-zinc-500">预设风格</label>
-            <select
-              value={preset}
-              onChange={(e) => setPreset(e.target.value as VectorizePreset)}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
-            >
-              {Object.entries(PRESET_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={preset}
+                onChange={(e) => setPreset(e.target.value as VectorizePreset)}
+                className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              >
+                {Object.entries(PRESET_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleNextPreset}
+                disabled={processing}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-emerald-500/50 hover:text-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                title="下一个预设并生成"
+                aria-label="下一个预设并生成"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Custom options toggle */}
@@ -559,7 +593,7 @@ export function ImageVectorizer({
 
           {/* Execute button */}
           <button
-            onClick={handleVectorize}
+            onClick={() => void handleVectorize()}
             disabled={processing}
             className="mt-3 w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
