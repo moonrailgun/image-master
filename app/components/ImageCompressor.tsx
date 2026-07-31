@@ -13,6 +13,15 @@ import {
   CompressResult,
 } from "../lib/image-compressor";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
+import {
+  PROCESSING_ERROR_TYPE,
+  trackToolDownload,
+  trackToolImport,
+  trackToolProcessFailure,
+  trackToolProcessStart,
+  trackToolProcessSuccess,
+} from "../lib/analytics";
+import { settleProcessOutcome } from "../lib/process-outcome";
 import type { TransferData } from "../types";
 
 interface FilePreview {
@@ -75,6 +84,7 @@ export function ImageCompressor({
     if (pendingTransfer && pendingTransfer.files.length > 0 && pendingTransfer !== lastTransferRef.current) {
       lastTransferRef.current = pendingTransfer;
       queueMicrotask(() => {
+        trackToolImport("compress", "transfer", pendingTransfer.files.length);
         setFiles(pendingTransfer.files);
         setResults([]);
         onTransferConsumed?.();
@@ -116,26 +126,56 @@ export function ImageCompressor({
       quality,
     };
 
+    const startedAt = trackToolProcessStart("compress", files.length);
+
     try {
       const results = await compressImages(files, options, (current, total) => {
         setProgress({ current, total });
       });
 
-      setResults(results);
-      setResultsVersion((v) => v + 1);
+      settleProcessOutcome(results.length, {
+        onSuccess: () => {
+          trackToolProcessSuccess(
+            "compress",
+            files.length,
+            results.length,
+            startedAt
+          );
+          setResults(results);
+          setResultsVersion((v) => v + 1);
 
-      // Calculate total savings
-      const totalOriginal = results.reduce((sum, r) => sum + r.originalSize, 0);
-      const totalCompressed = results.reduce((sum, r) => sum + r.compressedSize, 0);
-      const totalSavings = totalOriginal - totalCompressed;
-      const savingsPercent =
-        totalOriginal > 0 ? ((totalSavings / totalOriginal) * 100).toFixed(1) : 0;
+          const totalOriginal = results.reduce(
+            (sum, result) => sum + result.originalSize,
+            0
+          );
+          const totalCompressed = results.reduce(
+            (sum, result) => sum + result.compressedSize,
+            0
+          );
+          const totalSavings = totalOriginal - totalCompressed;
+          const savingsPercent =
+            totalOriginal > 0
+              ? ((totalSavings / totalOriginal) * 100).toFixed(1)
+              : 0;
 
-      showToast(
-        `成功压缩 ${results.length} 张图片，节省 ${formatFileSize(totalSavings)} (${savingsPercent}%)`,
-        "success"
-      );
+          showToast(
+            `成功压缩 ${results.length} 张图片，节省 ${formatFileSize(totalSavings)} (${savingsPercent}%)`,
+            "success"
+          );
+        },
+        onFailure: () => {
+          trackToolProcessFailure(
+            "compress",
+            files.length,
+            startedAt,
+            PROCESSING_ERROR_TYPE
+          );
+          setResults([]);
+          showToast("压缩失败: 未生成可用结果", "error");
+        },
+      });
     } catch (error) {
+      trackToolProcessFailure("compress", files.length, startedAt, error);
       console.error("Compress failed:", error);
       showToast(
         `压缩失败: ${error instanceof Error ? error.message : "未知错误"}`,
@@ -151,12 +191,14 @@ export function ImageCompressor({
 
     if (results.length === 1) {
       downloadSingle(results[0].blob, results[0].name);
+      trackToolDownload("compress", 1, "single");
     } else {
       const items: DownloadItem[] = results.map((result) => ({
         name: result.name,
         blob: result.blob,
       }));
       await downloadAsZip(items, "compressed-images.zip");
+      trackToolDownload("compress", results.length, "zip");
     }
   }, [results]);
 
@@ -172,7 +214,7 @@ export function ImageCompressor({
   if (!hasFiles) {
     return (
       <div className="flex flex-col gap-6">
-        <ImageDropzone onFilesSelected={handleFilesSelected} pasteEnabled={isActive} />
+        <ImageDropzone tool="compress" onFilesSelected={handleFilesSelected} pasteEnabled={isActive} />
         {lightboxImage && (
           <ImageLightbox
             src={lightboxImage.src}

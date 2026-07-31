@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ImageDropzone } from "./ImageDropzone";
 import { ImageLightbox } from "./ImageLightbox";
 import { DropdownMenu } from "./DropdownMenu";
@@ -14,6 +14,16 @@ import {
   ResizeResult,
 } from "../lib/image-resizer";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
+import {
+  PROCESSING_ERROR_TYPE,
+  trackToolDownload,
+  trackToolImport,
+  trackToolProcessFailure,
+  trackToolProcessStart,
+  trackToolProcessSuccess,
+} from "../lib/analytics";
+import { settleProcessOutcome } from "../lib/process-outcome";
+import { claimPendingTransfer } from "../lib/transfer";
 import type { TransferData } from "../types";
 
 interface FilePreview {
@@ -78,8 +88,10 @@ export function ImageResizer({
   }, [files.length, onHasFilesChange]);
 
   // Handle incoming transfer from other module
+  const lastTransferRef = useRef<TransferData | null>(null);
   useEffect(() => {
-    if (pendingTransfer && pendingTransfer.files.length > 0) {
+    if (claimPendingTransfer(pendingTransfer, lastTransferRef)) {
+      trackToolImport("resize", "transfer", pendingTransfer.files.length);
       setFiles(pendingTransfer.files);
       setResults([]);
       onTransferConsumed?.();
@@ -194,15 +206,38 @@ export function ImageResizer({
       lockAspectRatio,
     };
 
+    const startedAt = trackToolProcessStart("resize", files.length);
+
     try {
       const results = await resizeImages(files, options, (current, total) => {
         setProgress({ current, total });
       });
 
-      setResults(results);
-      setResultsVersion((v) => v + 1);
-      showToast(`成功处理 ${results.length} 张图片`, "success");
+      settleProcessOutcome(results.length, {
+        onSuccess: () => {
+          trackToolProcessSuccess(
+            "resize",
+            files.length,
+            results.length,
+            startedAt
+          );
+          setResults(results);
+          setResultsVersion((v) => v + 1);
+          showToast(`成功处理 ${results.length} 张图片`, "success");
+        },
+        onFailure: () => {
+          trackToolProcessFailure(
+            "resize",
+            files.length,
+            startedAt,
+            PROCESSING_ERROR_TYPE
+          );
+          setResults([]);
+          showToast("处理失败: 未生成可用结果", "error");
+        },
+      });
     } catch (error) {
+      trackToolProcessFailure("resize", files.length, startedAt, error);
       console.error("Resize failed:", error);
       showToast(
         `处理失败: ${error instanceof Error ? error.message : "未知错误"}`,
@@ -218,12 +253,14 @@ export function ImageResizer({
 
     if (results.length === 1) {
       downloadSingle(results[0].blob, results[0].name);
+      trackToolDownload("resize", 1, "single");
     } else {
       const items: DownloadItem[] = results.map((result) => ({
         name: result.name,
         blob: result.blob,
       }));
       await downloadAsZip(items, "resized-images.zip");
+      trackToolDownload("resize", results.length, "zip");
     }
   }, [results]);
 
@@ -241,7 +278,7 @@ export function ImageResizer({
   if (!hasFiles) {
     return (
       <div className="flex flex-col gap-6">
-        <ImageDropzone onFilesSelected={handleFilesSelected} pasteEnabled={isActive} />
+        <ImageDropzone tool="resize" onFilesSelected={handleFilesSelected} pasteEnabled={isActive} />
         {lightboxImage && (
           <ImageLightbox
             src={lightboxImage.src}

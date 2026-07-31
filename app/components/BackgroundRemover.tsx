@@ -17,6 +17,13 @@ import {
   ChannelSource,
 } from "../lib/background-remover";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
+import {
+  trackToolDownload,
+  trackToolImport,
+  trackToolProcessFailure,
+  trackToolProcessStart,
+  trackToolProcessSuccess,
+} from "../lib/analytics";
 import type { TransferData } from "../types";
 
 interface FilePreview {
@@ -97,6 +104,7 @@ export function BackgroundRemover({
     if (pendingTransfer && pendingTransfer.files.length > 0 && pendingTransfer !== lastTransferRef.current) {
       lastTransferRef.current = pendingTransfer;
       queueMicrotask(() => {
+        trackToolImport("background", "transfer", pendingTransfer.files.length);
         setFiles(pendingTransfer.files);
         setResults([]);
         setTargetColor(null);
@@ -134,6 +142,8 @@ export function BackgroundRemover({
   const handleProcess = useCallback(async () => {
     if (files.length === 0) return;
 
+    const startedAt = trackToolProcessStart("background", files.length);
+    let lastError: unknown;
     setProcessing(true);
     setProgress(0);
     setAiPhase("");
@@ -178,6 +188,7 @@ export function BackgroundRemover({
         }
         processed.push(result);
       } catch (error) {
+        lastError = error;
         console.error(`Failed to process ${file.name}:`, error);
       }
       if (mode !== "ai") {
@@ -187,6 +198,21 @@ export function BackgroundRemover({
 
     setResults(processed);
     setResultsVersion((v) => v + 1);
+    if (processed.length > 0) {
+      trackToolProcessSuccess(
+        "background",
+        files.length,
+        processed.length,
+        startedAt
+      );
+    } else {
+      trackToolProcessFailure(
+        "background",
+        files.length,
+        startedAt,
+        lastError
+      );
+    }
     setProcessing(false);
     setAiPhase("");
   }, [
@@ -212,12 +238,14 @@ export function BackgroundRemover({
 
     if (results.length === 1) {
       downloadSingle(results[0].blob, results[0].name);
+      trackToolDownload("background", 1, "single");
     } else {
       const items: DownloadItem[] = results.map((result) => ({
         name: result.name,
         blob: result.blob,
       }));
       await downloadAsZip(items, "transparent-images.zip");
+      trackToolDownload("background", results.length, "zip");
     }
   }, [results]);
 
@@ -235,7 +263,7 @@ export function BackgroundRemover({
   if (!hasFiles) {
     return (
       <div className="flex flex-col gap-6">
-        <ImageDropzone onFilesSelected={handleFilesSelected} pasteEnabled={isActive} />
+        <ImageDropzone tool="background" onFilesSelected={handleFilesSelected} pasteEnabled={isActive} />
         {lightboxImage && (
           <ImageLightbox
             src={lightboxImage.src}

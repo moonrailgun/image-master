@@ -1,15 +1,36 @@
 "use client";
 
 import { useCallback, useState, useEffect } from "react";
+import {
+  trackToolImport,
+  type ImportSource,
+  type ToolKey,
+} from "../lib/analytics";
 
 interface ImageDropzoneProps {
+  tool: ToolKey;
   onFilesSelected: (files: File[]) => void;
   accept?: string;
   multiple?: boolean;
   pasteEnabled?: boolean;
 }
 
+export function completeFileSelection(
+  files: File[],
+  multiple: boolean,
+  source: ImportSource,
+  tool: ToolKey,
+  onFilesSelected: (files: File[]) => void
+): void {
+  const accepted = multiple ? files : files.slice(0, 1);
+  if (accepted.length === 0) return;
+
+  trackToolImport(tool, source, accepted.length);
+  onFilesSelected(accepted);
+}
+
 export function ImageDropzone({
+  tool,
   onFilesSelected,
   accept = "image/png,image/jpeg,image/webp",
   multiple = true,
@@ -40,7 +61,7 @@ export function ImageDropzone({
         e.preventDefault();
         e.stopPropagation();
         setIsPasting(true);
-        onFilesSelected(multiple ? imageFiles : [imageFiles[0]]);
+        completeFileSelection(imageFiles, multiple, "paste", tool, onFilesSelected);
         setTimeout(() => setIsPasting(false), 300);
       }
     };
@@ -48,7 +69,7 @@ export function ImageDropzone({
     // Use capture phase to ensure we get the event before any input elements
     window.addEventListener("paste", handlePaste, { capture: true });
     return () => window.removeEventListener("paste", handlePaste, { capture: true });
-  }, [onFilesSelected, multiple, pasteEnabled]);
+  }, [onFilesSelected, multiple, pasteEnabled, tool]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -77,21 +98,21 @@ export function ImageDropzone({
         file.type.startsWith("image/")
       );
       if (files.length > 0) {
-        onFilesSelected(multiple ? files : [files[0]]);
+        completeFileSelection(files, multiple, "drop", tool, onFilesSelected);
       }
     },
-    [onFilesSelected, multiple]
+    [onFilesSelected, multiple, tool]
   );
 
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
       if (files.length > 0) {
-        onFilesSelected(files);
+        completeFileSelection(files, multiple, "picker", tool, onFilesSelected);
       }
       e.target.value = "";
     },
-    [onFilesSelected]
+    [onFilesSelected, multiple, tool]
   );
 
   const isActive = isDragging || isPasting;

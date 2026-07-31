@@ -6,11 +6,30 @@ import { ImageLightbox } from "./ImageLightbox";
 import { DropdownMenu } from "./DropdownMenu";
 import { splitSprites, splitSpritesGrid, SplitResult, SplitMode } from "../lib/sprite-splitter";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
+import {
+  PROCESSING_ERROR_TYPE,
+  trackToolDownload,
+  trackToolImport,
+  trackToolProcessFailure,
+  trackToolProcessStart,
+  trackToolProcessSuccess,
+} from "../lib/analytics";
+import { settleProcessOutcome } from "../lib/process-outcome";
 import type { TransferData } from "../types";
 
 interface ProcessedFile {
   originalName: string;
   sprites: SplitResult[];
+}
+
+export function countProcessedSpriteFiles(
+  processed: Array<{ sprites: unknown[] }>
+): number {
+  return processed.filter(({ sprites }) => sprites.length > 0).length;
+}
+
+export function getSpriteFailureCause(lastError: unknown): unknown {
+  return lastError ?? PROCESSING_ERROR_TYPE;
 }
 
 interface FilePreview {
@@ -67,6 +86,7 @@ export function SpriteSplitter({
     if (pendingTransfer && pendingTransfer.files.length > 0 && pendingTransfer !== lastTransferRef.current) {
       lastTransferRef.current = pendingTransfer;
       queueMicrotask(() => {
+        trackToolImport("sprite", "transfer", pendingTransfer.files.length);
         setFiles(pendingTransfer.files);
         setResults([]);
         onTransferConsumed?.();
@@ -100,6 +120,8 @@ export function SpriteSplitter({
   const handleProcess = useCallback(async () => {
     if (files.length === 0) return;
 
+    const startedAt = trackToolProcessStart("sprite", files.length);
+    let lastError: unknown;
     setProcessing(true);
     setProgress(0);
     const processed: ProcessedFile[] = [];
@@ -113,6 +135,7 @@ export function SpriteSplitter({
             : await splitSprites(file);
         processed.push({ originalName: file.name, sprites });
       } catch (error) {
+        lastError = error;
         console.error(`Failed to process ${file.name}:`, error);
       }
       setProgress(((i + 1) / files.length) * 100);
@@ -120,6 +143,23 @@ export function SpriteSplitter({
 
     setResults(processed);
     setResultsVersion((v) => v + 1);
+    const processedCount = countProcessedSpriteFiles(processed);
+    settleProcessOutcome(processedCount, {
+      onSuccess: () =>
+        trackToolProcessSuccess(
+          "sprite",
+          files.length,
+          processedCount,
+          startedAt
+        ),
+      onFailure: () =>
+        trackToolProcessFailure(
+          "sprite",
+          files.length,
+          startedAt,
+          getSpriteFailureCause(lastError)
+        ),
+    });
     setProcessing(false);
   }, [files, splitMode, gridColumns, gridRows]);
 
@@ -141,8 +181,10 @@ export function SpriteSplitter({
 
     if (items.length === 1) {
       downloadSingle(items[0].blob, items[0].name);
+      trackToolDownload("sprite", 1, "single");
     } else {
       await downloadAsZip(items, "sprites.zip");
+      trackToolDownload("sprite", items.length, "zip");
     }
   }, [results]);
 
@@ -159,7 +201,7 @@ export function SpriteSplitter({
   if (!hasFiles) {
     return (
       <div className="flex flex-col gap-6">
-        <ImageDropzone onFilesSelected={handleFilesSelected} accept="image/png" pasteEnabled={isActive} />
+        <ImageDropzone tool="sprite" onFilesSelected={handleFilesSelected} accept="image/png" pasteEnabled={isActive} />
         {lightboxImage && (
           <ImageLightbox
             src={lightboxImage.src}

@@ -15,6 +15,13 @@ import {
   UpscaleProgress,
 } from "../lib/super-resolution";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
+import {
+  trackToolDownload,
+  trackToolImport,
+  trackToolProcessFailure,
+  trackToolProcessStart,
+  trackToolProcessSuccess,
+} from "../lib/analytics";
 import type { TransferData } from "../types";
 
 interface FilePreview {
@@ -89,6 +96,7 @@ export function SuperResolution({
     if (pendingTransfer && pendingTransfer.files.length > 0 && pendingTransfer !== lastTransferRef.current) {
       lastTransferRef.current = pendingTransfer;
       queueMicrotask(() => {
+        trackToolImport("upscale", "transfer", pendingTransfer.files.length);
         setFiles(pendingTransfer.files);
         setResults([]);
         onTransferConsumed?.();
@@ -122,6 +130,8 @@ export function SuperResolution({
   const handleProcess = useCallback(async () => {
     if (files.length === 0) return;
 
+    const startedAt = trackToolProcessStart("upscale", files.length);
+    let lastError: unknown;
     setProcessing(true);
     const { maxWorkers } = getWorkerPoolInfo();
 
@@ -160,6 +170,7 @@ export function SuperResolution({
         progressData.set(index, progress);
         updateOverallProgress();
       }).catch((error) => {
+        lastError = error;
         console.error(`Failed to process ${file.name}:`, error);
         const errorMessage = error instanceof Error ? error.message : "未知错误";
 
@@ -178,6 +189,16 @@ export function SuperResolution({
 
     const results = await Promise.all(promises);
     const processed = results.filter((r): r is UpscaleResult => r !== null);
+    if (processed.length > 0) {
+      trackToolProcessSuccess(
+        "upscale",
+        files.length,
+        processed.length,
+        startedAt
+      );
+    } else {
+      trackToolProcessFailure("upscale", files.length, startedAt, lastError);
+    }
 
     setResults(processed);
     setResultsVersion((v) => v + 1);
@@ -201,12 +222,14 @@ export function SuperResolution({
 
     if (results.length === 1) {
       downloadSingle(results[0].blob, results[0].name);
+      trackToolDownload("upscale", 1, "single");
     } else {
       const items: DownloadItem[] = results.map((result) => ({
         name: result.name,
         blob: result.blob,
       }));
       await downloadAsZip(items, `upscaled-x${scale}.zip`);
+      trackToolDownload("upscale", results.length, "zip");
     }
   }, [results, scale]);
 
@@ -222,7 +245,7 @@ export function SuperResolution({
   if (!hasFiles) {
     return (
       <div className="flex flex-col gap-6">
-        <ImageDropzone onFilesSelected={handleFilesSelected} pasteEnabled={isActive} />
+        <ImageDropzone tool="upscale" onFilesSelected={handleFilesSelected} pasteEnabled={isActive} />
         {lightboxImage && (
           <ImageLightbox
             src={lightboxImage.src}

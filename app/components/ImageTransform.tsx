@@ -11,6 +11,15 @@ import {
   TransformResult,
 } from "../lib/image-transform";
 import { downloadAsZip, downloadSingle, DownloadItem } from "../lib/download";
+import {
+  PROCESSING_ERROR_TYPE,
+  trackToolDownload,
+  trackToolImport,
+  trackToolProcessFailure,
+  trackToolProcessStart,
+  trackToolProcessSuccess,
+} from "../lib/analytics";
+import { settleProcessOutcome } from "../lib/process-outcome";
 import type { TransferData } from "../types";
 
 interface FilePreview {
@@ -72,6 +81,7 @@ export function ImageTransform({
     if (pendingTransfer && pendingTransfer.files.length > 0 && pendingTransfer !== lastTransferRef.current) {
       lastTransferRef.current = pendingTransfer;
       queueMicrotask(() => {
+        trackToolImport("transform", "transfer", pendingTransfer.files.length);
         setFiles(pendingTransfer.files);
         setResults([]);
         onTransferConsumed?.();
@@ -109,15 +119,38 @@ export function ImageTransform({
     setProcessing(true);
     setProgress({ current: 0, total: files.length });
 
+    const startedAt = trackToolProcessStart("transform", files.length);
+
     try {
       const newResults = await transformImages(files, options, (current, total) => {
         setProgress({ current, total });
       });
 
-      setResults(newResults);
-      setResultsVersion((v) => v + 1);
-      showToast(`成功处理 ${newResults.length} 张图片`, "success");
+      settleProcessOutcome(newResults.length, {
+        onSuccess: () => {
+          trackToolProcessSuccess(
+            "transform",
+            files.length,
+            newResults.length,
+            startedAt
+          );
+          setResults(newResults);
+          setResultsVersion((v) => v + 1);
+          showToast(`成功处理 ${newResults.length} 张图片`, "success");
+        },
+        onFailure: () => {
+          trackToolProcessFailure(
+            "transform",
+            files.length,
+            startedAt,
+            PROCESSING_ERROR_TYPE
+          );
+          setResults([]);
+          showToast("处理失败: 未生成可用结果", "error");
+        },
+      });
     } catch (error) {
+      trackToolProcessFailure("transform", files.length, startedAt, error);
       console.error("Transform failed:", error);
       showToast(
         `处理失败: ${error instanceof Error ? error.message : "未知错误"}`,
@@ -164,12 +197,14 @@ export function ImageTransform({
 
     if (results.length === 1) {
       downloadSingle(results[0].blob, results[0].name);
+      trackToolDownload("transform", 1, "single");
     } else {
       const items: DownloadItem[] = results.map((result) => ({
         name: result.name,
         blob: result.blob,
       }));
       await downloadAsZip(items, "transformed-images.zip");
+      trackToolDownload("transform", results.length, "zip");
     }
   }, [results]);
 
@@ -185,7 +220,7 @@ export function ImageTransform({
   if (!hasFiles) {
     return (
       <div className="flex flex-col gap-6">
-        <ImageDropzone onFilesSelected={handleFilesSelected} pasteEnabled={isActive} />
+        <ImageDropzone tool="transform" onFilesSelected={handleFilesSelected} pasteEnabled={isActive} />
         {lightboxImage && (
           <ImageLightbox
             src={lightboxImage.src}

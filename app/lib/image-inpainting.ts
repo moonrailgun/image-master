@@ -204,6 +204,17 @@ export async function isModelCached(): Promise<boolean> {
   return cached !== null;
 }
 
+export async function refreshModelCachedStatus(
+  getCachedStatus: () => Promise<boolean>,
+  setCachedStatus: (cached: boolean) => void
+): Promise<void> {
+  try {
+    setCachedStatus(await getCachedStatus());
+  } catch {
+    // Cache status is best effort and must not change a completed inpaint result.
+  }
+}
+
 /**
  * Clear the cached model
  */

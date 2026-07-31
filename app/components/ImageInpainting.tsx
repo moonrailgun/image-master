@@ -11,8 +11,16 @@ import {
   isModelCached,
   InpaintingResult,
   InpaintingProgress,
+  refreshModelCachedStatus,
 } from "../lib/image-inpainting";
 import { downloadSingle } from "../lib/download";
+import {
+  trackToolDownload,
+  trackToolImport,
+  trackToolProcessFailure,
+  trackToolProcessStart,
+  trackToolProcessSuccess,
+} from "../lib/analytics";
 import type { TransferData } from "../types";
 
 interface ImageInpaintingProps {
@@ -111,6 +119,7 @@ export function ImageInpainting({
     if (pendingTransfer && pendingTransfer.files.length > 0 && pendingTransfer !== lastTransferRef.current) {
       lastTransferRef.current = pendingTransfer;
       queueMicrotask(() => {
+        trackToolImport("inpaint", "transfer", 1);
         handleFilesSelected(pendingTransfer.files);
         onTransferConsumed?.();
       });
@@ -369,34 +378,38 @@ export function ImageInpainting({
       return;
     }
 
+    const startedAt = trackToolProcessStart("inpaint", 1);
     setProcessing(true);
     setIsFullscreen(false);
     setProgressInfo({ stage: "processing", progress: 0, message: "准备中..." });
 
+    let result: InpaintingResult;
     try {
-      const result = await inpaintImage(file, maskImageData, (progress) => {
+      result = await inpaintImage(file, maskImageData, (progress) => {
         setProgressInfo(progress);
       });
-
-      setResult(result);
-      showToast("图片修复完成", "success");
-
-      // Update cache status
-      const cached = await isModelCached();
-      setModelCached(cached);
     } catch (error) {
+      trackToolProcessFailure("inpaint", 1, startedAt, error);
       console.error("Inpainting failed:", error);
       const errorMessage = error instanceof Error ? error.message : "未知错误";
       showToast(`修复失败: ${errorMessage}`, "error");
-    } finally {
       setProcessing(false);
       setProgressInfo(null);
+      return;
     }
+
+    trackToolProcessSuccess("inpaint", 1, 1, startedAt);
+    setResult(result);
+    showToast("图片修复完成", "success");
+    void refreshModelCachedStatus(isModelCached, setModelCached);
+    setProcessing(false);
+    setProgressInfo(null);
   }, [file, getMaskImageData, showToast]);
 
   const handleDownload = useCallback(() => {
     if (!result) return;
     downloadSingle(result.blob, result.name);
+    trackToolDownload("inpaint", 1, "single");
   }, [result]);
 
   const handleClear = useCallback(() => {
@@ -448,6 +461,7 @@ export function ImageInpainting({
     return (
       <div className="flex flex-col gap-6">
         <ImageDropzone
+          tool="inpaint"
           onFilesSelected={handleFilesSelected}
           pasteEnabled={isActive}
           multiple={false}

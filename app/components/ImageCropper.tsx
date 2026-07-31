@@ -15,6 +15,13 @@ import {
   getTrimTransparentArea,
 } from "../lib/image-cropper";
 import { downloadSingle } from "../lib/download";
+import {
+  trackToolDownload,
+  trackToolImport,
+  trackToolProcessFailure,
+  trackToolProcessStart,
+  trackToolProcessSuccess,
+} from "../lib/analytics";
 import type { TransferData } from "../types";
 
 interface ImageCropperProps {
@@ -124,6 +131,7 @@ export function ImageCropper({
     ) {
       lastTransferRef.current = pendingTransfer;
       queueMicrotask(() => {
+        trackToolImport("crop", "transfer", 1);
         handleFilesSelected(pendingTransfer.files);
         onTransferConsumed?.();
       });
@@ -400,12 +408,15 @@ export function ImageCropper({
   const handleCrop = useCallback(async () => {
     if (!file) return;
 
+    const startedAt = trackToolProcessStart("crop", 1);
     setProcessing(true);
     try {
       const cropResult = await cropImage(file, cropArea);
+      trackToolProcessSuccess("crop", 1, 1, startedAt);
       setResult(cropResult);
       showToast("裁剪成功", "success");
     } catch (error) {
+      trackToolProcessFailure("crop", 1, startedAt, error);
       console.error("Crop failed:", error);
       showToast(
         `裁剪失败: ${error instanceof Error ? error.message : "未知错误"}`,
@@ -457,6 +468,7 @@ export function ImageCropper({
     if (!result || !file) return;
     const resultFile = blobToFile(result.blob, file.name);
     downloadSingle(result.blob, resultFile.name);
+    trackToolDownload("crop", 1, "single");
   }, [result, file]);
 
   // Clear all
@@ -509,6 +521,7 @@ export function ImageCropper({
     return (
       <div className="flex flex-col gap-6">
         <ImageDropzone
+          tool="crop"
           onFilesSelected={handleFilesSelected}
           multiple={false}
           pasteEnabled={isActive}

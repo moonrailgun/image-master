@@ -14,6 +14,15 @@ import {
   PRESET_LABELS,
 } from "../lib/image-vectorizer";
 import { downloadAsZip, downloadSingle } from "../lib/download";
+import {
+  PROCESSING_ERROR_TYPE,
+  trackToolDownload,
+  trackToolImport,
+  trackToolProcessFailure,
+  trackToolProcessStart,
+  trackToolProcessSuccess,
+} from "../lib/analytics";
+import { settleProcessOutcome } from "../lib/process-outcome";
 import type { TransferData } from "../types";
 
 type SvgViewMode = "compare" | "sideBySide" | "svgOnly";
@@ -169,6 +178,7 @@ export function ImageVectorizer({
     ) {
       lastTransferRef.current = pendingTransfer;
       queueMicrotask(() => {
+        trackToolImport("vectorize", "transfer", pendingTransfer.files.length);
         setFiles(pendingTransfer.files);
         setResults([]);
         onTransferConsumed?.();
@@ -203,6 +213,8 @@ export function ImageVectorizer({
     setProcessing(true);
     setProgress({ current: 0, total: files.length });
 
+    const startedAt = trackToolProcessStart("vectorize", files.length);
+
     try {
       const options: VectorizeOptions = {
         preset,
@@ -224,10 +236,31 @@ export function ImageVectorizer({
         }
       );
 
-      setResults(newResults);
-      setResultsVersion((v) => v + 1);
-      showToast(`成功矢量化 ${newResults.length} 张图片`, "success");
+      settleProcessOutcome(newResults.length, {
+        onSuccess: () => {
+          trackToolProcessSuccess(
+            "vectorize",
+            files.length,
+            newResults.length,
+            startedAt
+          );
+          setResults(newResults);
+          setResultsVersion((v) => v + 1);
+          showToast(`成功矢量化 ${newResults.length} 张图片`, "success");
+        },
+        onFailure: () => {
+          trackToolProcessFailure(
+            "vectorize",
+            files.length,
+            startedAt,
+            PROCESSING_ERROR_TYPE
+          );
+          setResults([]);
+          showToast("矢量化失败: 未生成可用结果", "error");
+        },
+      });
     } catch (error) {
+      trackToolProcessFailure("vectorize", files.length, startedAt, error);
       console.error("Vectorize failed:", error);
       showToast(
         `矢量化失败: ${error instanceof Error ? error.message : "未知错误"}`,
@@ -254,12 +287,14 @@ export function ImageVectorizer({
     if (results.length === 1) {
       const blob = svgToBlob(results[0].svgString);
       downloadSingle(blob, results[0].name);
+      trackToolDownload("vectorize", 1, "single");
     } else {
       const items = results.map((r) => ({
         name: r.name,
         blob: svgToBlob(r.svgString),
       }));
       await downloadAsZip(items, "vectorized-images.zip");
+      trackToolDownload("vectorize", results.length, "zip");
     }
   }, [results]);
 
@@ -295,6 +330,7 @@ export function ImageVectorizer({
     return (
       <div className="flex flex-col gap-6">
         <ImageDropzone
+          tool="vectorize"
           onFilesSelected={handleFilesSelected}
           pasteEnabled={isActive}
         />
