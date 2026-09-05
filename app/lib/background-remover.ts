@@ -24,6 +24,7 @@ export interface ChannelMattingOptions {
 
 export interface AIRemoveBackgroundOptions {
   model: AIModel;
+  refineEdges?: boolean;
   edgeShrink?: number; // 0-20 pixels
   onProgress?: (phase: string, progress: number) => void;
 }
@@ -33,6 +34,7 @@ export interface RemoveResult {
   blob: Blob;
   width: number;
   height: number;
+  warning?: string;
 }
 
 type RGBColor = { r: number; g: number; b: number };
@@ -716,14 +718,14 @@ export async function aiRemoveBackground(
     "@imgly/background-removal"
   );
 
-  const { model, edgeShrink = 0, onProgress } = options;
+  const { model, edgeShrink = 0, refineEdges = false, onProgress } = options;
 
   onProgress?.("init", 0);
 
   const blob = await imglyRemoveBackground(file, {
     model,
     progress: (key: string, current: number, total: number) => {
-      const ratio = total > 0 ? current / total : 0;
+      const ratio = (total > 0 ? current / total : 0) * (refineEdges ? 0.6 : 1);
       if (key.includes("fetch:")) {
         onProgress?.("download", ratio);
       } else if (key === "compute:inference") {
@@ -734,7 +736,17 @@ export async function aiRemoveBackground(
     },
   });
 
-  const resultBlob = blob instanceof Blob ? blob : new Blob([blob], { type: "image/png" });
+  let resultBlob = blob instanceof Blob ? blob : new Blob([blob], { type: "image/png" });
+  let warning: string | undefined;
+  if (refineEdges) {
+    try {
+      const { refineMatting } = await import("./matting");
+      resultBlob = await refineMatting(file, resultBlob, onProgress);
+    } catch (error) {
+      console.warn("Matting refinement failed; keeping the coarse cutout", error);
+      warning = "边缘精修未完成，已保留初步抠图结果。";
+    }
+  }
 
   if (edgeShrink > 0) {
     const img = await loadImageFromBlob(resultBlob);
@@ -747,20 +759,24 @@ export async function aiRemoveBackground(
     applyEdgeShrink(imageData.data, canvas.width, canvas.height, edgeShrink);
     ctx.putImageData(imageData, 0, 0);
     const shrunkBlob = await canvasToBlob(canvas);
+    onProgress?.("processing", 1);
     return {
       name: file.name.replace(/\.[^/.]+$/, "") + ".png",
       blob: shrunkBlob,
       width: canvas.width,
       height: canvas.height,
+      warning,
     };
   }
 
   const img = await loadImageFromBlob(resultBlob);
+  onProgress?.("processing", 1);
   return {
     name: file.name.replace(/\.[^/.]+$/, "") + ".png",
     blob: resultBlob,
     width: img.width,
     height: img.height,
+    warning,
   };
 }
 

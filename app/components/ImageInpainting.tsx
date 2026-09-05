@@ -616,6 +616,9 @@ export function ImageInpainting({
                     下载图片
                   </button>
                   <DropdownMenu
+                    onSendToCurrent={() => handleFilesSelected([
+                      new File([result.blob], result.name, { type: result.blob.type }),
+                    ])}
                     items={[
                       ...(onSendToSprite
                         ? [

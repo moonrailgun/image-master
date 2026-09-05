@@ -721,9 +721,10 @@ export function ImageVectorizer({
                 </svg>
                 {results.length === 1 ? "下载 SVG" : "下载 ZIP"}
               </button>
-              {sendToItems.length > 0 && (
-                <DropdownMenu items={sendToItems} />
-              )}
+              <DropdownMenu
+                items={sendToItems}
+                onSendToCurrent={makeSendToHandler(handleFilesSelected)}
+              />
             </div>
           )}
         </div>

@@ -365,6 +365,11 @@ export function SpriteSplitter({
                     {totalSprites === 1 ? "下载图片" : "下载 ZIP"}
                   </button>
                   <DropdownMenu
+                    onSendToCurrent={() => handleFilesSelected(
+                      results.flatMap((r) => r.sprites.map(
+                        (sprite) => new File([sprite.blob], sprite.name, { type: sprite.blob.type })
+                      ))
+                    )}
                     items={[
                       ...(onSendToBackground
                         ? [

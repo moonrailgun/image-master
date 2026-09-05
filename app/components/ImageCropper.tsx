@@ -966,6 +966,10 @@ export function ImageCropper({
                     下载
                   </button>
                   <DropdownMenu
+                    onSendToCurrent={() => {
+                      const resultFile = getResultFile();
+                      if (resultFile) handleFilesSelected([resultFile]);
+                    }}
                     items={[
                       ...(onSendToSprite
                         ? [

@@ -487,6 +487,7 @@ export function ImageTransform({
                     {results.length === 1 ? "下载" : "下载 ZIP"}
                   </button>
                   <DropdownMenu
+                    onSendToCurrent={handleUseResults}
                     items={[
                       ...(onSendToSprite
                         ? [

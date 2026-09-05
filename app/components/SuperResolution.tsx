@@ -423,6 +423,9 @@ export function SuperResolution({
                     {results.length === 1 ? "下载图片" : "下载 ZIP"}
                   </button>
                   <DropdownMenu
+                    onSendToCurrent={() => handleFilesSelected(
+                      results.map((r) => new File([r.blob], r.name, { type: r.blob.type }))
+                    )}
                     items={[
                       ...(onSendToSprite
                         ? [

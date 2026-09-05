@@ -72,6 +72,7 @@ export function BackgroundRemover({
 
   // AI options
   const [aiModel, setAiModel] = useState<AIModel>("isnet");
+  const [refineEdges, setRefineEdges] = useState(false);
   const [aiPhase, setAiPhase] = useState("");
 
   // Channel matting options
@@ -156,6 +157,7 @@ export function BackgroundRemover({
         if (mode === "ai") {
           result = await aiRemoveBackground(file, {
             model: aiModel,
+            refineEdges,
             edgeShrink,
             onProgress: (phase, ratio) => {
               setAiPhase(phase);
@@ -219,6 +221,7 @@ export function BackgroundRemover({
     files,
     mode,
     aiModel,
+    refineEdges,
     tolerance,
     contiguousOnly,
     targetColor,
@@ -559,6 +562,27 @@ export function BackgroundRemover({
                   </p>
                 </div>
 
+                <details className="rounded-lg border border-zinc-700/50 bg-zinc-900/40 p-3">
+                  <summary className="cursor-pointer text-sm text-zinc-300">进阶</summary>
+                  <div className="mt-3 space-y-2">
+                    <label className="flex items-center gap-2 text-sm text-zinc-300">
+                      <input
+                        type="checkbox"
+                        checked={refineEdges}
+                        disabled={processing}
+                        onChange={(event) => setRefineEdges(event.target.checked)}
+                        aria-describedby="matting-description"
+                        className="h-4 w-4 accent-emerald-500"
+                      />
+                      边缘精修
+                      <span className="text-xs text-zinc-500">实验性</span>
+                    </label>
+                    <p id="matting-description" className="text-xs leading-relaxed text-zinc-500">
+                      尝试改善发丝、毛发和半透明边缘。首次开启需额外下载约 28MB 模型，会增加处理时间；大图会缩小后精修，导出保持原尺寸。精修失败时保留初步抠图结果。
+                    </p>
+                  </div>
+                </details>
+
                 <div className="rounded-lg border border-zinc-700/50 bg-zinc-900/40 p-3">
                   <div className="flex items-start gap-2">
                     <svg className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -788,6 +812,8 @@ export function BackgroundRemover({
                   {aiPhase === "inference" && "AI 推理中..."}
                   {aiPhase === "init" && "初始化..."}
                   {aiPhase === "processing" && "处理中..."}
+                  {aiPhase === "matting-download" && "正在加载边缘精修模型..."}
+                  {aiPhase === "matting-inference" && "正在精修边缘，可能需要较长时间..."}
                 </span>
               )}
             </span>
@@ -796,6 +822,13 @@ export function BackgroundRemover({
 
         {/* Right column - Results */}
         <div className="flex flex-col gap-4">
+          {results.some((result) => result.warning) && (
+            <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+              {results.filter((result) => result.warning).map((result, index) => (
+                <p key={index} className="break-all">{result.name}：{result.warning}</p>
+              ))}
+            </div>
+          )}
           <div className="rounded-xl bg-zinc-800/50 p-4">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm font-medium text-zinc-300">
@@ -816,6 +849,9 @@ export function BackgroundRemover({
                     {results.length === 1 ? "下载图片" : "下载 ZIP"}
                   </button>
                   <DropdownMenu
+                    onSendToCurrent={() => handleFilesSelected(
+                      results.map((r) => new File([r.blob], r.name, { type: r.blob.type }))
+                    )}
                     items={[
                       ...(onSendToSprite
                         ? [
